@@ -63,7 +63,37 @@ export function renderSection(sec) {
   const title = escapeLatex(sec?.title || "Untitled");
   const body = mdToLatex(sec?.content || "");
   const children = (sec?.children || []).map(renderSection).join("\n\n");
-  return `${cmd}{${title}}\n\n${body}\n\n${children}`.trim();
+
+  // Render images, tables, and equations (if provided in the section object)
+  const images = (sec?.images || []).map((img) => {
+    // img: { filename, caption, width }
+    const caption = escapeLatex(img.caption || "");
+    const width = img.width ? `[width=${img.width}]` : "";
+    return `\\begin{figure}[h]\n\\centering\n\\includegraphics${width}{${img.filename}}\n${caption ? `\\caption{${caption}}\n` : ""}\\end{figure}`;
+  }).join("\n\n");
+
+  const tables = (sec?.tables || []).map((t) => {
+    // t: { csv, caption }
+    const rows = String(t.csv || "").split(/\r?\n/).filter(Boolean).map(r => r.split(/\s*,\s*/));
+    if (!rows.length) return "";
+    const cols = rows[0].length;
+    const colSpec = Array(cols).fill("l").join("|");
+    const bodyRows = rows.map(r => r.map(cell => escapeLatex(cell || "")).join(" & \\ ")).join(" \\\n+");
+    const caption = escapeLatex(t.caption || "");
+    return `\\begin{table}[h]\n\\centering\n\\begin{tabular}{|${colSpec}|}\n\\hline\n${bodyRows}\\\\\n\\hline\n\\end{tabular}\n${caption ? `\\caption{${caption}}\n` : ""}\\end{table}`;
+  }).join("\n\n");
+
+  const equations = (sec?.equations || []).map((eq) => {
+    // eq: { latex, caption }
+    const caption = escapeLatex(eq.caption || "");
+    const latex = String(eq.latex || "");
+    const displayed = `\\[\n${latex}\n\\]`;
+    return `${displayed}${caption ? `\n\\begin{center}\n\\textit{${caption}}\n\\end{center}` : ""}`;
+  }).join("\n\n");
+
+  const extras = [images, tables, equations].filter(Boolean).join("\n\n");
+
+  return `${cmd}{${title}}\n\n${body}\n\n${extras}\n\n${children}`.trim();
 }
 
 // Ensambla todas las secciones (separadas por \clearpage)

@@ -1,32 +1,77 @@
 import React, { useState } from "react";
-import { downloadText } from "./utils/fileDownload.js";
-import { buildTex } from "./utils/latexExport.js";
-import { downloadZip } from "./utils/zipDownload.js";
+import "./app.css"; // Importamos los estilos que definimos aparte
+
+// --- FUNCIONES DE UTILIDAD (Internas para evitar errores de importación) ---
+
+const downloadText = (filename, content) => {
+  const element = document.createElement("a");
+  const file = new Blob([content], { type: "text/plain" });
+  element.href = URL.createObjectURL(file);
+  element.download = filename;
+  document.body.appendChild(element);
+  element.click();
+  document.body.removeChild(element);
+};
+
+const buildTex = (preamble, { meta, sections }) => {
+  let tex = `\\documentclass{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage{graphicx}\n\\title{${meta.title}}\n\\author{${meta.author}}\n\\date{${meta.date}}\n\\begin{document}\n\\maketitle\n\n`;
+
+  sections.forEach(section => {
+    if (section.id === 'intro') {
+      tex += `\\section*{${section.title}}\n${section.content}\n\n`;
+    } else if (section.id === 'chapters') {
+      section.children.forEach(ch => {
+        tex += `\\section{${ch.title}}\n${ch.content}\n\n`;
+        if (ch.images && ch.images.length > 0) {
+             ch.images.forEach(img => {
+                 tex += `\\begin{figure}[h]\n\\centering\n% \\includegraphics[width=0.8\\textwidth]{${img.filename}}\n\\caption{${img.caption || img.filename}}\n\\end{figure}\n\n`;
+             });
+        }
+      });
+    } else if (section.id === 'conclusions') {
+      tex += `\\section*{${section.title}}\n${section.content}\n\n`;
+    }
+  });
+  tex += `\\end{document}`;
+  return tex;
+};
+
+const downloadZip = async (files, filename) => {
+  // Simulación: En un entorno real usarías JSZip.
+  // Aquí descargamos el .tex principal como demostración.
+  alert("Simulación ZIP: Descargando archivo principal .tex");
+  const texFile = files.find(f => f.name.endsWith('.tex'));
+  if (texFile) downloadText(texFile.name, texFile.content);
+};
+
+
+// --- COMPONENTES DE UI REUTILIZABLES ---
+
+const ActionButton = ({ onClick, children, primary }) => (
+  <button 
+    onClick={onClick} 
+    className={`btn ${primary ? 'btn-primary' : 'btn-secondary'}`}
+  >
+    {children}
+  </button>
+);
 
 export default function App() {
-  // Estado inicial para meta (Portada)
+  // --- ESTADOS ---
   const [meta, setMeta] = useState({
     title: "Mi Tesis",
     author: "Johnatan Josue Suarez",
     date: "25 Septiembre 2025",
   });
 
-  // Estado para secciones: Introducción, Capítulos (dinámicos), Conclusiones
   const [intro, setIntro] = useState("");
   const [chapters, setChapters] = useState([
-    { id: "ch1", title: "Capítulo 1", content: "" }
+    { id: "ch1", title: "Capítulo 1", content: "", images: [], tables: [], equations: [] }
   ]);
   const [conclusions, setConclusions] = useState("");
+  const [bib, setBib] = useState(`@article{smith2023,\n  author = {Smith, Jane},\n  title = {Un gran paper},\n  journal = {Revista de Ejemplo},\n  year = {2023}\n}`);
 
-  // BibTeX
-  const [bib, setBib] = useState(`@article{smith2023,
-  author = {Smith, Jane},
-  title = {Un gran paper},
-  journal = {Revista de Ejemplo},
-  year = {2023}
-}`);
-
-  // Construye el arreglo de secciones para exportar
+  // Estructura lógica para exportar
   const sections = [
     { id: "intro", title: "Introducción", level: 1, content: intro },
     {
@@ -37,152 +82,210 @@ export default function App() {
         id: ch.id,
         title: ch.title || `Capítulo ${idx + 1}`,
         level: 2,
-        content: ch.content || ""
+        content: ch.content || "",
+        images: ch.images || []
       }))
     },
     { id: "conclusions", title: "Conclusiones", level: 1, content: conclusions }
   ];
 
-
-  // Funciones de exportación
-  function exportJSON() {
-    downloadText("thesis.json", JSON.stringify({ meta, sections }, null, 2));
-  }
-
-  function exportTEX() {
-    const tex = buildTex("", { meta, sections });
-    downloadText("thesis.tex", tex);
-  }
-
-  function exportBIB() {
-    downloadText("references.bib", bib);
-  }
-
+  // --- ACCIONES ---
+  function exportJSON() { downloadText("thesis.json", JSON.stringify({ meta, sections }, null, 2)); }
+  function exportTEX() { const tex = buildTex("", { meta, sections }); downloadText("thesis.tex", tex); }
+  function exportBIB() { downloadText("references.bib", bib); }
   async function exportZIP() {
     const tex = buildTex("", { meta, sections });
-    await downloadZip([
-      { name: "thesis.tex", content: tex },
-      { name: "references.bib", content: bib }
-    ], "thesis.zip");
+    const imageFiles = chapters.flatMap(ch => (ch.images || []).map(im => ({ name: im.filename, content: im.file })));
+    const toZip = [{ name: "thesis.tex", content: tex }, { name: "references.bib", content: bib }, ...imageFiles];
+    await downloadZip(toZip, "thesis.zip");
   }
 
-  // UI para editar capítulos dinámicamente
-  function addChapter() {
-    setChapters([...chapters, { id: `ch${chapters.length + 1}`, title: `Capítulo ${chapters.length + 1}`, content: "" }]);
-  }
-  function removeChapter(idx) {
-    setChapters(chapters.filter((_, i) => i !== idx));
-  }
-  function updateChapter(idx, field, value) {
-    setChapters(chapters.map((ch, i) => i === idx ? { ...ch, [field]: value } : ch));
-  }
+  // --- HELPERS DE EDICIÓN ---
+  const addChapter = () => setChapters([...chapters, { id: `ch${chapters.length + 1}`, title: `Capítulo ${chapters.length + 1}`, content: "", images: [], tables: [], equations: [] }]);
+  const removeChapter = (idx) => setChapters(chapters.filter((_, i) => i !== idx));
+  const updateChapter = (idx, field, value) => setChapters(chapters.map((ch, i) => i === idx ? { ...ch, [field]: value } : ch));
+  
+  const updateItemMeta = (type, idx, itemId, field, value) => {
+    setChapters(chapters.map((ch, i) => i === idx ? { 
+      ...ch, 
+      [type]: (ch[type]||[]).map(item => item.id === itemId ? { ...item, [field]: value } : item) 
+    } : ch));
+  };
 
+  function addImageToChapter(idx, file) {
+      if(!file) return;
+      setChapters(chapters.map((ch, i) => i === idx ? { ...ch, images: [...(ch.images||[]), { id: Date.now(), file, filename: file.name, caption: "", width: "" }] } : ch));
+  }
+  function removeImageFromChapter(idx, id) { setChapters(chapters.map((ch, i) => i === idx ? { ...ch, images: ch.images.filter(x => x.id !== id) } : ch)); }
+  
+  // Auto-resize para textareas (efecto elástico)
+  const handleResize = (e, setter) => {
+    setter(e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = e.target.scrollHeight + 'px';
+  };
+
+  // --- RENDERIZADO ---
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center py-8">
-      <h1 className="text-2xl font-bold mb-6">Thesis Builder (Demo)</h1>
+    <div className="app-container">
+      
+      {/* Barra de Navegación */}
+      <nav className="navbar">
+        <div className="nav-brand">
+            <span className="brand-name">Thesis Builder</span>
+            <span className="brand-separator">/</span>
+            <span className="document-title">{meta.title || "Sin título"}</span>
+        </div>
+        <div className="nav-actions">
+            <ActionButton onClick={exportJSON}>JSON</ActionButton>
+            <ActionButton onClick={exportTEX}>LaTeX</ActionButton>
+            <ActionButton onClick={exportZIP} primary>Exportar</ActionButton>
+        </div>
+      </nav>
 
-      {/* Portada (meta) */}
-      <div className="bg-white p-4 rounded shadow mb-6 w-full max-w-xl">
-        <h2 className="font-semibold mb-2">Portada</h2>
-        <input
-          className="border p-1 rounded w-full mb-2"
-          value={meta.title}
-          onChange={e => setMeta({ ...meta, title: e.target.value })}
-          placeholder="Título de la tesis"
-        />
-        <input
-          className="border p-1 rounded w-full mb-2"
-          value={meta.author}
-          onChange={e => setMeta({ ...meta, author: e.target.value })}
-          placeholder="Autor"
-        />
-        <input
-          className="border p-1 rounded w-full"
-          value={meta.date}
-          onChange={e => setMeta({ ...meta, date: e.target.value })}
-          placeholder="Fecha"
-        />
-      </div>
-
-      {/* Introducción */}
-      <div className="bg-white p-4 rounded shadow mb-6 w-full max-w-xl">
-        <h2 className="font-semibold mb-2">Introducción</h2>
-        <textarea
-          className="border p-1 rounded w-full min-h-[80px]"
-          value={intro}
-          onChange={e => setIntro(e.target.value)}
-          placeholder="Texto de la introducción"
-        />
-      </div>
-
-      {/* Capítulos */}
-      <div className="bg-white p-4 rounded shadow mb-6 w-full max-w-xl">
-        <h2 className="font-semibold mb-2">Capítulos</h2>
-        {chapters.map((ch, idx) => (
-          <div key={ch.id} className="mb-4 border-b pb-2">
+      {/* Área Principal de Edición */}
+      <main className="editor-main">
+        
+        {/* Bloque: Portada */}
+        <div className="section-block">
             <input
-              className="border p-1 rounded w-full mb-1 font-semibold"
-              value={ch.title}
-              onChange={e => updateChapter(idx, "title", e.target.value)}
-              placeholder={`Título del capítulo ${idx + 1}`}
+                className="input-ghost input-h1"
+                value={meta.title}
+                onChange={e => setMeta({ ...meta, title: e.target.value })}
+                placeholder="Título de la Tesis"
             />
+            
+            <div className="meta-group">
+                <div className="meta-item">
+                    <span className="label-small">Autor</span>
+                    <input
+                        className="input-ghost input-meta"
+                        value={meta.author}
+                        onChange={e => setMeta({ ...meta, author: e.target.value })}
+                        placeholder="Tu Nombre"
+                    />
+                </div>
+                <div className="meta-item">
+                    <span className="label-small">Fecha</span>
+                    <input
+                        className="input-ghost input-meta"
+                        value={meta.date}
+                        onChange={e => setMeta({ ...meta, date: e.target.value })}
+                        placeholder="Seleccionar fecha"
+                    />
+                </div>
+            </div>
+        </div>
+
+        {/* Bloque: Introducción */}
+        <section className="section-block">
+            <div className="section-header">
+                <h2 className="label-small">Introducción</h2>
+            </div>
             <textarea
-              className="border p-1 rounded w-full min-h-[60px]"
-              value={ch.content}
-              onChange={e => updateChapter(idx, "content", e.target.value)}
-              placeholder={`Texto del capítulo ${idx + 1}`}
+                className="input-ghost textarea-content"
+                value={intro}
+                onChange={e => handleResize(e, setIntro)}
+                placeholder="Escribe una introducción..."
             />
-            {chapters.length > 1 && (
-              <button
-                className="text-red-500 text-xs mt-1"
-                onClick={() => removeChapter(idx)}
-              >Eliminar capítulo</button>
-            )}
-          </div>
-        ))}
-        <button
-          className="px-2 py-1 border rounded bg-gray-100 hover:bg-gray-200 text-sm"
-          onClick={addChapter}
-        >Agregar capítulo</button>
-      </div>
+        </section>
 
-      {/* Conclusiones */}
-      <div className="bg-white p-4 rounded shadow mb-6 w-full max-w-xl">
-        <h2 className="font-semibold mb-2">Conclusiones</h2>
-        <textarea
-          className="border p-1 rounded w-full min-h-[80px]"
-          value={conclusions}
-          onChange={e => setConclusions(e.target.value)}
-          placeholder="Texto de las conclusiones"
-        />
-      </div>
+        {/* Bloque: Capítulos */}
+        <div className="section-block">
+            {chapters.map((ch, idx) => (
+                <section key={ch.id} className="chapter-block">
+                    
+                    <div className="chapter-title-row">
+                        <input
+                            className="input-ghost input-h1"
+                            style={{ fontSize: '2rem', marginBottom: 0 }}
+                            value={ch.title}
+                            onChange={e => updateChapter(idx, "title", e.target.value)}
+                            placeholder="Título del Capítulo"
+                        />
+                        <button onClick={() => removeChapter(idx)} className="btn btn-danger">
+                            Eliminar
+                        </button>
+                    </div>
 
-      {/* BibTeX */}
-      <div className="bg-white p-4 rounded shadow mb-6 w-full max-w-xl">
-        <h2 className="font-semibold mb-2">Referencias (BibTeX)</h2>
-        <textarea
-          className="border p-1 rounded w-full min-h-[80px] font-mono"
-          value={bib}
-          onChange={e => setBib(e.target.value)}
-          placeholder="Pega aquí tus referencias en formato BibTeX"
-        />
-      </div>
+                    <textarea
+                        className="input-ghost textarea-content"
+                        value={ch.content}
+                        onChange={e => {
+                             updateChapter(idx, "content", e.target.value);
+                             e.target.style.height = 'auto';
+                             e.target.style.height = e.target.scrollHeight + 'px';
+                        }}
+                        placeholder="Empieza a escribir..."
+                    />
 
-      {/* Botones de exportación */}
-      <div className="flex gap-4 mb-8">
-        <button onClick={exportJSON} className="px-4 py-2 border rounded bg-white shadow hover:bg-gray-100">
-          Export JSON
-        </button>
-        <button onClick={exportTEX} className="px-4 py-2 border rounded bg-white shadow hover:bg-gray-100">
-          Export TEX
-        </button>
-        <button onClick={exportBIB} className="px-4 py-2 border rounded bg-white shadow hover:bg-gray-100">
-          Export BIB
-        </button>
-        <button onClick={exportZIP} className="px-4 py-2 border rounded bg-white shadow hover:bg-gray-100">
-          Export ZIP
-        </button>
-      </div>
+                    {/* Grid de Imágenes */}
+                    <div className="media-grid">
+                        {ch.images?.map(im => (
+                            <div key={im.id} className="image-card">
+                                <span className="label-small">{im.filename}</span>
+                                <button 
+                                    onClick={() => removeImageFromChapter(idx, im.id)}
+                                    className="btn-close-card"
+                                >×</button>
+                                <input
+                                    className="input-ghost caption-input"
+                                    value={im.caption}
+                                    onChange={e => updateItemMeta('images', idx, im.id, 'caption', e.target.value)}
+                                    placeholder="Escribe un pie de foto..."
+                                />
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Herramientas Flotantes */}
+                    <div className="hover-toolbar">
+                        <label className="tool-btn">
+                            <span>+ Imagen</span>
+                            <input type="file" className="hidden" accept="image/*" style={{display:'none'}} onChange={e => addImageToChapter(idx, e.target.files?.[0])} />
+                        </label>
+                        <button className="tool-btn">+ Tabla</button>
+                        <button className="tool-btn">+ Ecuación</button>
+                    </div>
+                </section>
+            ))}
+
+            <button onClick={addChapter} className="btn-add-large">
+                <span style={{fontSize: '1.5rem'}}>+</span>
+                <span style={{fontWeight: 500}}>Agregar nuevo capítulo</span>
+            </button>
+        </div>
+
+        {/* Bloque: Conclusiones */}
+        <section className="section-block">
+            <div className="section-header">
+                <h2 className="label-small">Conclusiones</h2>
+            </div>
+            <textarea
+                className="input-ghost textarea-content"
+                value={conclusions}
+                onChange={e => handleResize(e, setConclusions)}
+                placeholder="Escribe las conclusiones..."
+            />
+        </section>
+
+        {/* Bloque: Referencias */}
+        <section className="section-block" style={{ marginBottom: 0 }}>
+             <div className="section-header">
+                <h2 className="label-small">Referencias (BibTeX)</h2>
+            </div>
+            <textarea
+                className="input-ghost textarea-content textarea-mono"
+                value={bib}
+                onChange={e => setBib(e.target.value)}
+                placeholder="Pega aquí tus referencias..."
+            />
+            <div style={{marginTop: '1rem'}}>
+                <ActionButton onClick={exportBIB}>Descargar .bib</ActionButton>
+            </div>
+        </section>
+
+      </main>
     </div>
   );
 }
