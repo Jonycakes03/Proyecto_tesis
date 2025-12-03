@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { ActionButton } from "./components";
 import "./app.css"; // Importamos los estilos que definimos aparte
 
