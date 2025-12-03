@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { ActionButton } from "./components";
 import "./app.css"; // Importamos los estilos que definimos aparte
 
 // --- FUNCIONES DE UTILIDAD (Internas para evitar errores de importación) ---
@@ -43,18 +44,6 @@ const downloadZip = async (files, filename) => {
   const texFile = files.find(f => f.name.endsWith('.tex'));
   if (texFile) downloadText(texFile.name, texFile.content);
 };
-
-
-// --- COMPONENTES DE UI REUTILIZABLES ---
-
-const ActionButton = ({ onClick, children, primary }) => (
-  <button 
-    onClick={onClick} 
-    className={`btn ${primary ? 'btn-primary' : 'btn-secondary'}`}
-  >
-    {children}
-  </button>
-);
 
 export default function App() {
   // --- ESTADOS ---
@@ -137,9 +126,9 @@ export default function App() {
             <span className="document-title">{meta.title || "Sin título"}</span>
         </div>
         <div className="nav-actions">
-            <ActionButton onClick={exportJSON}>JSON</ActionButton>
-            <ActionButton onClick={exportTEX}>LaTeX</ActionButton>
-            <ActionButton onClick={exportZIP} primary>Exportar</ActionButton>
+            <ActionButton parentMethod={exportJSON} label="JSON"/>
+            <ActionButton parentMethod={exportTEX} label="LaTeX"/>
+            <ActionButton parentMethod={exportZIP} primary label="Exportar"/>
         </div>
       </nav>
 
@@ -281,7 +270,7 @@ export default function App() {
                 placeholder="Pega aquí tus referencias..."
             />
             <div style={{marginTop: '1rem'}}>
-                <ActionButton onClick={exportBIB}>Descargar .bib</ActionButton>
+                <ActionButton parentMethod={exportBIB} label="Exportar referencias"/>
             </div>
         </section>
 
