@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ActionButton } from "./components";
 import "./app.css"; // Importamos los estilos que definimos aparte
 import { downloadZip } from "./utils/zipDownload";
+import { buildTex } from "./utils/latexExport";
 
 // --- FUNCIONES DE UTILIDAD (Internas para evitar errores de importación) ---
 
@@ -13,55 +14,6 @@ const downloadText = (filename, content) => {
   document.body.appendChild(element);
   element.click();
   document.body.removeChild(element);
-};
-
-const buildTex = (preamble, { meta, sections }) => {
-  let tex = `\\documentclass{article}\n\\usepackage[utf8]{inputenc}\n\\usepackage{graphicx}\n\\title{${meta.title}}\n\\author{${meta.author}}\n\\date{${meta.date}}\n\\begin{document}\n\\maketitle\n\n`;
-
-  sections.forEach(section => {
-    if (section.id === 'intro') {
-      tex += `\\section*{${section.title}}\n${section.content}\n\n`;
-    } else if (section.id === 'chapters') {
-      section.children.forEach(ch => {
-        tex += `\\section{${ch.title}}\n${ch.content}\n\n`;
-
-        // Images
-        if (ch.images && ch.images.length > 0) {
-          ch.images.forEach(img => {
-            tex += `\\begin{figure}[h]\n\\centering\n \\includegraphics[width=0.8\\textwidth]{images/${img.filename}}\n\\caption{${img.caption || img.filename}}\n\\end{figure}\n\n`;
-          });
-        }
-
-        // Tables
-        if (ch.tables && ch.tables.length > 0) {
-          ch.tables.forEach(tbl => {
-            const cols = "c".repeat(tbl.cols);
-            let tableContent = "";
-            for (let i = 0; i < tbl.rows; i++) {
-              const rowData = [];
-              for (let j = 0; j < tbl.cols; j++) {
-                rowData.push(tbl.data[`${i}-${j}`] || "");
-              }
-              tableContent += rowData.join(" & ") + " \\\\\n";
-            }
-            tex += `\\begin{table}[h]\n\\centering\n\\begin{tabular}{|${cols}|}\n\\hline\n${tableContent}\\hline\n\\end{tabular}\n\\caption{Tabla}\n\\end{table}\n\n`;
-          });
-        }
-
-        // Equations
-        if (ch.equations && ch.equations.length > 0) {
-          ch.equations.forEach(eq => {
-            tex += `\\begin{equation}\n${eq.content}\n\\end{equation}\n\n`;
-          });
-        }
-
-      });
-    } else if (section.id === 'conclusions') {
-      tex += `\\section*{${section.title}}\n${section.content}\n\n`;
-    }
-  });
-  tex += `\\end{document}`;
-  return tex;
 };
 
 // --- COMPONENTES INTERNOS DE MODAL ---
@@ -200,10 +152,31 @@ export default function App() {
 
   // --- ACCIONES ---
   function exportJSON() { downloadText("thesis.json", JSON.stringify({ meta, sections }, null, 2)); }
-  function exportTEX() { const tex = buildTex("", { meta, sections }); downloadText("thesis.tex", tex); }
+
+  function getExportSections() {
+    return [
+      { title: "Introducción", level: 1, content: intro, unnumbered: true },
+      ...chapters.map(ch => ({
+        title: ch.title,
+        level: 1,
+        content: ch.content,
+        images: ch.images,
+        tables: ch.tables,
+        equations: ch.equations
+      })),
+      { title: "Conclusiones", level: 1, content: conclusions, unnumbered: true }
+    ];
+  }
+
+  function exportTEX() {
+    const exportSections = getExportSections();
+    const tex = buildTex("", { meta, sections: exportSections });
+    downloadText("thesis.tex", tex);
+  }
   function exportBIB() { downloadText("references.bib", bib); }
   async function exportZIP() {
-    const tex = buildTex("", { meta, sections });
+    const exportSections = getExportSections();
+    const tex = buildTex("", { meta, sections: exportSections });
     // Prefix image filenames with "images/" so they go into that folder in the zip
     const imageFiles = chapters.flatMap(ch => (ch.images || []).map(im => ({ name: `images/${im.filename}`, content: im.file })));
     const toZip = [{ name: "thesis.tex", content: tex }, { name: "references.bib", content: bib }, ...imageFiles];
