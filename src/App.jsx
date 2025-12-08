@@ -24,11 +24,37 @@ const buildTex = (preamble, { meta, sections }) => {
     } else if (section.id === 'chapters') {
       section.children.forEach(ch => {
         tex += `\\section{${ch.title}}\n${ch.content}\n\n`;
+
+        // Images
         if (ch.images && ch.images.length > 0) {
           ch.images.forEach(img => {
-            tex += `\\begin{figure}[h]\n\\centering\n% \\includegraphics[width=0.8\\textwidth]{images/${img.filename}}\n\\caption{${img.caption || img.filename}}\n\\end{figure}\n\n`;
+            tex += `\\begin{figure}[h]\n\\centering\n \\includegraphics[width=0.8\\textwidth]{images/${img.filename}}\n\\caption{${img.caption || img.filename}}\n\\end{figure}\n\n`;
           });
         }
+
+        // Tables
+        if (ch.tables && ch.tables.length > 0) {
+          ch.tables.forEach(tbl => {
+            const cols = "c".repeat(tbl.cols);
+            let tableContent = "";
+            for (let i = 0; i < tbl.rows; i++) {
+              const rowData = [];
+              for (let j = 0; j < tbl.cols; j++) {
+                rowData.push(tbl.data[`${i}-${j}`] || "");
+              }
+              tableContent += rowData.join(" & ") + " \\\\\n";
+            }
+            tex += `\\begin{table}[h]\n\\centering\n\\begin{tabular}{|${cols}|}\n\\hline\n${tableContent}\\hline\n\\end{tabular}\n\\caption{Tabla}\n\\end{table}\n\n`;
+          });
+        }
+
+        // Equations
+        if (ch.equations && ch.equations.length > 0) {
+          ch.equations.forEach(eq => {
+            tex += `\\begin{equation}\n${eq.content}\n\\end{equation}\n\n`;
+          });
+        }
+
       });
     } else if (section.id === 'conclusions') {
       tex += `\\section*{${section.title}}\n${section.content}\n\n`;
@@ -37,6 +63,100 @@ const buildTex = (preamble, { meta, sections }) => {
   tex += `\\end{document}`;
   return tex;
 };
+
+// --- COMPONENTES INTERNOS DE MODAL ---
+
+const TableModal = ({ onClose, onInsert }) => {
+  const [rows, setRows] = useState(2);
+  const [cols, setCols] = useState(2);
+  const [step, setStep] = useState(1); // 1: Config, 2: Data
+  const [data, setData] = useState({});
+
+  const handleCellChange = (r, c, val) => {
+    setData({ ...data, [`${r}-${c}`]: val });
+  };
+
+  const handleInsert = () => {
+    onInsert({ rows, cols, data });
+    onClose();
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content">
+        <h3>Agregar Tabla</h3>
+        {step === 1 ? (
+          <div className="modal-body">
+            <div className="form-group">
+              <label>Filas:</label>
+              <input type="number" min="1" value={rows} onChange={e => setRows(parseInt(e.target.value))} />
+            </div>
+            <div className="form-group">
+              <label>Columnas:</label>
+              <input type="number" min="1" value={cols} onChange={e => setCols(parseInt(e.target.value))} />
+            </div>
+            <div className="modal-actions">
+              <button onClick={onClose}>Cancelar</button>
+              <button onClick={() => setStep(2)}>Siguiente</button>
+            </div>
+          </div>
+        ) : (
+          <div className="modal-body">
+            <div className="table-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+              {Array.from({ length: rows * cols }).map((_, idx) => {
+                const r = Math.floor(idx / cols);
+                const c = idx % cols;
+                return (
+                  <input
+                    key={`${r}-${c}`}
+                    placeholder={`(${r + 1},${c + 1})`}
+                    value={data[`${r}-${c}`] || ""}
+                    onChange={e => handleCellChange(r, c, e.target.value)}
+                  />
+                );
+              })}
+            </div>
+            <div className="modal-actions">
+              <button onClick={() => setStep(1)}>Atrás</button>
+              <button onClick={handleInsert}>Insertar</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const EquationModal = ({ onClose, onInsert }) => {
+  const [content, setContent] = useState("");
+
+  const handleInsert = () => {
+    onInsert({ content });
+    onClose();
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content">
+        <h3>Agregar Ecuación</h3>
+        <div className="modal-body">
+          <textarea
+            placeholder="Escribe tu ecuación en LaTeX (ej: E = mc^2)"
+            value={content}
+            onChange={e => setContent(e.target.value)}
+            rows={5}
+            style={{ width: '100%' }}
+          />
+          <div className="modal-actions">
+            <button onClick={onClose}>Cancelar</button>
+            <button onClick={handleInsert}>Insertar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 export default function App() {
   // --- ESTADOS ---
@@ -53,6 +173,11 @@ export default function App() {
   const [conclusions, setConclusions] = useState("");
   const [bib, setBib] = useState(`@article{smith2023,\n  author = {Smith, Jane},\n  title = {Un gran paper},\n  journal = {Revista de Ejemplo},\n  year = {2023}\n}`);
 
+  // Modal State
+  const [activeModal, setActiveModal] = useState(null); // 'table' | 'equation' | null
+  const [activeChapterIdx, setActiveChapterIdx] = useState(null);
+
+
   // Estructura lógica para exportar
   const sections = [
     { id: "intro", title: "Introducción", level: 1, content: intro },
@@ -65,7 +190,9 @@ export default function App() {
         title: ch.title || `Capítulo ${idx + 1}`,
         level: 2,
         content: ch.content || "",
-        images: ch.images || []
+        images: ch.images || [],
+        tables: ch.tables || [],
+        equations: ch.equations || []
       }))
     },
     { id: "conclusions", title: "Conclusiones", level: 1, content: conclusions }
@@ -100,6 +227,27 @@ export default function App() {
     setChapters(chapters.map((ch, i) => i === idx ? { ...ch, images: [...(ch.images || []), { id: Date.now(), file, filename: file.name, caption: "", width: "" }] } : ch));
   }
   function removeImageFromChapter(idx, id) { setChapters(chapters.map((ch, i) => i === idx ? { ...ch, images: ch.images.filter(x => x.id !== id) } : ch)); }
+
+  // Table & Equation Helpers
+  const openModal = (type, idx) => {
+    setActiveModal(type);
+    setActiveChapterIdx(idx);
+  };
+  const closeModal = () => {
+    setActiveModal(null);
+    setActiveChapterIdx(null);
+  };
+  const insertTable = (tableData) => {
+    if (activeChapterIdx === null) return;
+    setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, tables: [...(ch.tables || []), { id: Date.now(), ...tableData }] } : ch));
+  };
+  const insertEquation = (eqData) => {
+    if (activeChapterIdx === null) return;
+    setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, equations: [...(ch.equations || []), { id: Date.now(), ...eqData }] } : ch));
+  };
+  const removeTable = (idx, id) => { setChapters(chapters.map((ch, i) => i === idx ? { ...ch, tables: ch.tables.filter(x => x.id !== id) } : ch)); };
+  const removeEquation = (idx, id) => { setChapters(chapters.map((ch, i) => i === idx ? { ...ch, equations: ch.equations.filter(x => x.id !== id) } : ch)); };
+
 
   // Auto-resize para textareas (efecto elástico)
   const handleResize = (e, setter) => {
@@ -203,23 +351,52 @@ export default function App() {
               />
 
               {/* Grid de Imágenes */}
-              <div className="media-grid">
-                {ch.images?.map(im => (
-                  <div key={im.id} className="image-card">
-                    <span className="label-small">{im.filename}</span>
-                    <button
-                      onClick={() => removeImageFromChapter(idx, im.id)}
-                      className="btn-close-card"
-                    >×</button>
-                    <input
-                      className="input-ghost caption-input"
-                      value={im.caption}
-                      onChange={e => updateItemMeta('images', idx, im.id, 'caption', e.target.value)}
-                      placeholder="Escribe un pie de foto..."
-                    />
-                  </div>
-                ))}
-              </div>
+              {ch.images && ch.images.length > 0 && (
+                <div className="media-grid">
+                  {ch.images.map(im => (
+                    <div key={im.id} className="image-card">
+                      <span className="label-small">{im.filename}</span>
+                      <button
+                        onClick={() => removeImageFromChapter(idx, im.id)}
+                        className="btn-close-card"
+                      >×</button>
+                      <input
+                        className="input-ghost caption-input"
+                        value={im.caption}
+                        onChange={e => updateItemMeta('images', idx, im.id, 'caption', e.target.value)}
+                        placeholder="Escribe un pie de foto..."
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Lista de Tablas */}
+              {ch.tables && ch.tables.length > 0 && (
+                <div className="media-list">
+                  <h4>Tablas</h4>
+                  {ch.tables.map(tbl => (
+                    <div key={tbl.id} className="media-item">
+                      <span>Tabla ({tbl.rows}x{tbl.cols})</span>
+                      <button onClick={() => removeTable(idx, tbl.id)} className="btn-small-danger">Eliminar</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Lista de Ecuaciones */}
+              {ch.equations && ch.equations.length > 0 && (
+                <div className="media-list">
+                  <h4>Ecuaciones</h4>
+                  {ch.equations.map(eq => (
+                    <div key={eq.id} className="media-item">
+                      <code>{eq.content}</code>
+                      <button onClick={() => removeEquation(idx, eq.id)} className="btn-small-danger">Eliminar</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
 
               {/* Herramientas Flotantes */}
               <div className="hover-toolbar">
@@ -227,8 +404,8 @@ export default function App() {
                   <span>+ Imagen</span>
                   <input type="file" className="hidden" accept="image/*" style={{ display: 'none' }} onChange={e => addImageToChapter(idx, e.target.files?.[0])} />
                 </label>
-                <button className="tool-btn">+ Tabla</button>
-                <button className="tool-btn">+ Ecuación</button>
+                <button className="tool-btn" onClick={() => openModal('table', idx)}>+ Tabla</button>
+                <button className="tool-btn" onClick={() => openModal('equation', idx)}>+ Ecuación</button>
               </div>
             </section>
           ))}
@@ -269,6 +446,11 @@ export default function App() {
         </section>
 
       </main>
+
+      {/* MODALES */}
+      {activeModal === 'table' && <TableModal onClose={closeModal} onInsert={insertTable} />}
+      {activeModal === 'equation' && <EquationModal onClose={closeModal} onInsert={insertEquation} />}
+
     </div>
   );
 }
