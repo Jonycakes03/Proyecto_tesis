@@ -1,8 +1,10 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ActionButton } from "./components";
 import "./app.css"; // Importamos los estilos que definimos aparte
 import { downloadZip } from "./utils/zipDownload";
 import { buildTex } from "./utils/latexExport";
+import { get, set } from "idb-keyval";
+import { fileToBase64, base64ToFile } from "./utils/imageUtils";
 
 // --- FUNCIONES DE UTILIDAD (Internas para evitar errores de importación) ---
 
@@ -109,13 +111,122 @@ const EquationModal = ({ onClose, onInsert }) => {
   );
 };
 
+const ReferenceModal = ({ onClose, onInsert }) => {
+  const [type, setType] = useState("article");
+  const [fields, setFields] = useState({ key: "", author: "", title: "", year: "", journal: "", publisher: "" });
 
-export default function App() {
+  const handleChange = (field, value) => {
+    setFields({ ...fields, [field]: value });
+  };
+
+  const handleInsert = () => {
+    // Basic BibTeX generation
+    let bib = `@${type}{${fields.key || "ref" + Date.now()},\n`;
+    if (fields.author) bib += `  author = {${fields.author}},\n`;
+    if (fields.title) bib += `  title = {${fields.title}},\n`;
+    if (fields.year) bib += `  year = {${fields.year}},\n`;
+    if (type === "article" && fields.journal) bib += `  journal = {${fields.journal}},\n`;
+    if ((type === "book" || type === "inproceedings") && fields.publisher) bib += `  publisher = {${fields.publisher}},\n`;
+    bib += `}`;
+
+    onInsert(bib);
+    onClose();
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-content">
+        <h3>Agregar Referencia</h3>
+        <div className="modal-body">
+          <div className="form-group">
+            <label>Tipo:</label>
+            <select value={type} onChange={e => setType(e.target.value)} style={{ width: '100%', padding: '0.5rem' }}>
+              <option value="article">Artículo</option>
+              <option value="book">Libro</option>
+              <option value="inproceedings">Conferencia</option>
+              <option value="misc">Otro</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Clave (Citation Key):</label>
+            <input placeholder="ej: smith2023" value={fields.key} onChange={e => handleChange("key", e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Autor:</label>
+            <input placeholder="Autor(es)" value={fields.author} onChange={e => handleChange("author", e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Título:</label>
+            <input placeholder="Título del trabajo" value={fields.title} onChange={e => handleChange("title", e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>Año:</label>
+            <input type="number" placeholder="Año" value={fields.year} onChange={e => handleChange("year", e.target.value)} />
+          </div>
+
+          {type === "article" && (
+            <div className="form-group">
+              <label>Journal:</label>
+              <input placeholder="Nombre de la revista" value={fields.journal} onChange={e => handleChange("journal", e.target.value)} />
+            </div>
+          )}
+
+          {(type === "book" || type === "inproceedings") && (
+            <div className="form-group">
+              <label>Publisher:</label>
+              <input placeholder="Editorial" value={fields.publisher} onChange={e => handleChange("publisher", e.target.value)} />
+            </div>
+          )}
+
+          <div className="modal-actions">
+            <button onClick={onClose}>Cancelar</button>
+            <button onClick={handleInsert}>Insertar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    this.setState({ error, errorInfo });
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '2rem', color: 'red' }}>
+          <h1>Algo salió mal.</h1>
+          <details style={{ whiteSpace: 'pre-wrap' }}>
+            {this.state.error && this.state.error.toString()}
+            <br />
+            {this.state.errorInfo && this.state.errorInfo.componentStack}
+          </details>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function AppContent() {
   // --- ESTADOS ---
   const [meta, setMeta] = useState({
+
     title: "Mi Tesis",
-    author: "Johnatan Josue Suarez",
-    date: "25 Septiembre 2025",
+    author: "Nombre del autor",
+    date: "Fecha de la tesis",
   });
 
   const [intro, setIntro] = useState("");
@@ -126,7 +237,7 @@ export default function App() {
   const [bib, setBib] = useState(`@article{smith2023,\n  author = {Smith, Jane},\n  title = {Un gran paper},\n  journal = {Revista de Ejemplo},\n  year = {2023}\n}`);
 
   // Modal State
-  const [activeModal, setActiveModal] = useState(null); // 'table' | 'equation' | null
+  const [activeModal, setActiveModal] = useState(null); // 'table' | 'equation' | 'reference' | null
   const [activeChapterIdx, setActiveChapterIdx] = useState(null);
 
 
@@ -151,7 +262,105 @@ export default function App() {
   ];
 
   // --- ACCIONES ---
-  function exportJSON() { downloadText("thesis.json", JSON.stringify({ meta, sections }, null, 2)); }
+  // --- EFECTOS DE PERSISTENCIA ---
+  const [loading, setLoading] = useState(true);
+
+  // Cargar estado al inicio
+  useEffect(() => {
+    async function loadState() {
+      try {
+        const saved = await get('thesis-data');
+        if (saved) {
+          if (saved.meta) setMeta(saved.meta);
+          if (saved.intro) setIntro(saved.intro);
+          if (saved.chapters && Array.isArray(saved.chapters)) setChapters(saved.chapters);
+          if (saved.conclusions) setConclusions(saved.conclusions);
+          if (saved.bib) setBib(saved.bib);
+        }
+      } catch (err) {
+        console.error("Error loading state:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadState();
+  }, []);
+
+  // Auto-guardado (Debounced 1s)
+  useEffect(() => {
+    if (loading) return; // No guardar mientras carga
+
+    const timer = setTimeout(() => {
+      set('thesis-data', {
+        meta,
+        intro,
+        chapters, // IndexedDB soporta File/Blob nativamente
+        conclusions,
+        bib
+      }).catch(err => console.error("Error auto-saving:", err));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [meta, intro, chapters, conclusions, bib, loading]);
+
+
+  // --- ACCIONES ---
+  async function exportJSON() {
+    // Para exportar a JSON (texto), necesitamos convertir las imágenes (Blob/File) a Base64
+    const chaptersWithBase64 = await Promise.all(chapters.map(async (ch) => {
+      const imagesBase64 = await Promise.all((ch.images || []).map(async (im) => ({
+        ...im,
+        file: null, // No podemos guardar el objeto File en JSON
+        base64: await fileToBase64(im.file),
+        mimeType: im.file.type || 'image/png' // Guardar tipo para reconstruir
+      })));
+      return { ...ch, images: imagesBase64 };
+    }));
+
+    const exportData = {
+      meta,
+      intro,
+      chapters: chaptersWithBase64,
+      conclusions,
+      bib,
+      version: 1
+    };
+
+    downloadText("thesis_backup.json", JSON.stringify(exportData, null, 2));
+  }
+
+  async function importJSON(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      if (data.meta) setMeta(data.meta);
+      if (data.intro) setIntro(data.intro);
+      if (data.conclusions) setConclusions(data.conclusions);
+      if (data.bib) setBib(data.bib);
+
+      if (data.chapters) {
+        // Reconstruir File objects desde Base64
+        const reconstructedChapters = data.chapters.map(ch => ({
+          ...ch,
+          images: (ch.images || []).map(im => ({
+            ...im,
+            file: base64ToFile(im.base64, im.filename),
+            base64: undefined // Limpiar base64 de la memoria activa si no se necesita
+          }))
+        }));
+        setChapters(reconstructedChapters);
+      }
+
+      alert("Copia de seguridad restaurada correctamente.");
+    } catch (err) {
+      console.error(err);
+      alert("Error al importar el archivo JSON.");
+    }
+  }
 
   function getExportSections() {
     return [
@@ -221,6 +430,10 @@ export default function App() {
   const removeTable = (idx, id) => { setChapters(chapters.map((ch, i) => i === idx ? { ...ch, tables: ch.tables.filter(x => x.id !== id) } : ch)); };
   const removeEquation = (idx, id) => { setChapters(chapters.map((ch, i) => i === idx ? { ...ch, equations: ch.equations.filter(x => x.id !== id) } : ch)); };
 
+  const insertReference = (bibEntry) => {
+    setBib(prev => prev + "\n\n" + bibEntry);
+  };
+
 
   // Auto-resize para textareas (efecto elástico)
   const handleResize = (e, setter) => {
@@ -230,6 +443,10 @@ export default function App() {
   };
 
   // --- RENDERIZADO ---
+  if (loading) {
+    return <div className="app-container" style={{ justifyContent: 'center', alignItems: 'center' }}>Cargando tus datos...</div>;
+  }
+
   return (
     <div className="app-container">
 
@@ -241,9 +458,13 @@ export default function App() {
           <span className="document-title">{meta.title || "Sin título"}</span>
         </div>
         <div className="nav-actions">
-          <ActionButton parentMethod={exportJSON} label="JSON" />
+          <label className="btn btn-secondary" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>Importar</span>
+            <input type="file" accept=".json" style={{ display: 'none' }} onChange={importJSON} />
+          </label>
+          <ActionButton parentMethod={exportJSON} label="Guardar Backup" />
           <ActionButton parentMethod={exportTEX} label="LaTeX" />
-          <ActionButton parentMethod={exportZIP} primary label="Exportar" />
+          <ActionButton parentMethod={exportZIP} primary label="Exportar ZIP" />
         </div>
       </nav>
 
@@ -413,7 +634,8 @@ export default function App() {
             onChange={e => setBib(e.target.value)}
             placeholder="Pega aquí tus referencias..."
           />
-          <div style={{ marginTop: '1rem' }}>
+          <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem' }}>
+            <button className="btn btn-secondary" onClick={() => setActiveModal('reference')}>+ Referencia</button>
             <ActionButton parentMethod={exportBIB} label="Exportar referencias" />
           </div>
         </section>
@@ -423,7 +645,16 @@ export default function App() {
       {/* MODALES */}
       {activeModal === 'table' && <TableModal onClose={closeModal} onInsert={insertTable} />}
       {activeModal === 'equation' && <EquationModal onClose={closeModal} onInsert={insertEquation} />}
+      {activeModal === 'reference' && <ReferenceModal onClose={() => setActiveModal(null)} onInsert={insertReference} />}
 
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
   );
 }
