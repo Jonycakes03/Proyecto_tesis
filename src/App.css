@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
 /* --- Variables y Reset --- */
 :root {
   --bg-color: #ffffff;
@@ -12,8 +13,8 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
   background-color: var(--bg-color);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   color: var(--text-main);
 }
 
