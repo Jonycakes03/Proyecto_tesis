@@ -2,13 +2,20 @@
 /* --- Variables y Reset --- */
 :root {
   --bg-color: #ffffff;
-  --text-main: #1f2937;       /* gray-800 */
-  --text-muted: #9ca3af;      /* gray-400 */
-  --text-placeholder: #d1d5db; /* gray-300 */
-  --border-color: #e5e7eb;    /* gray-200 */
-  --accent-color: #111827;    /* gray-900 */
-  --danger-color: #ef4444;    /* red-500 */
-  --hover-bg: #f9fafb;        /* gray-50 */
+  --text-main: #1f2937;
+  /* gray-800 */
+  --text-muted: #9ca3af;
+  /* gray-400 */
+  --text-placeholder: #d1d5db;
+  /* gray-300 */
+  --border-color: #e5e7eb;
+  /* gray-200 */
+  --accent-color: #111827;
+  /* gray-900 */
+  --danger-color: #ef4444;
+  /* red-500 */
+  --hover-bg: #f9fafb;
+  /* gray-50 */
 }
 
 body {
@@ -51,7 +58,8 @@ body {
 .brand-name {
   font-size: 0.875rem;
   font-weight: 500;
-  color: #6b7280; /* gray-500 */
+  color: #6b7280;
+  /* gray-500 */
 }
 
 .brand-separator {
@@ -137,7 +145,8 @@ body {
 .editor-main {
   flex: 1;
   width: 100%;
-  max-width: 64rem; /* max-w-5xl */
+  max-width: 64rem;
+  /* max-w-5xl */
   margin: 0 auto;
   padding: 3rem 1.5rem;
   display: flex;
@@ -204,7 +213,8 @@ body {
   transition: border-color 0.2s;
 }
 
-.input-meta:hover, .input-meta:focus {
+.input-meta:hover,
+.input-meta:focus {
   border-color: var(--border-color);
 }
 
@@ -225,7 +235,8 @@ body {
   transition: border-color 0.2s;
 }
 
-.textarea-content:hover, .textarea-content:focus {
+.textarea-content:hover,
+.textarea-content:focus {
   border-color: var(--border-color);
 }
 
@@ -348,4 +359,105 @@ body {
 
 .tool-btn:hover {
   color: var(--accent-color);
+}
+
+/* --- Modals --- */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+}
+
+.modal-content {
+  background-color: white;
+  padding: 2rem;
+  border-radius: 0.5rem;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.modal-body {
+  margin-top: 1rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.25rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.table-grid {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.table-grid input {
+  width: 100%;
+  padding: 0.25rem;
+  border: 1px solid var(--border-color);
+  text-align: center;
+}
+
+/* --- Media Lists (Tables, Equations) --- */
+.media-list {
+  margin-top: 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  background-color: var(--hover-bg);
+}
+
+.media-list h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.media-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.media-item:last-child {
+  border-bottom: none;
+}
+
+.btn-small-danger {
+  color: var(--danger-color);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
 }
