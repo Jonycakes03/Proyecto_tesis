@@ -26,6 +26,7 @@ const downloadText = (filename, content) => {
 const TableModal = ({ onClose, onInsert }) => {
     const [rows, setRows] = useState(2);
     const [cols, setCols] = useState(2);
+    const [name, setName] = useState("");
     const [step, setStep] = useState(1); // 1: Config, 2: Data
     const [data, setData] = useState({});
 
@@ -34,7 +35,7 @@ const TableModal = ({ onClose, onInsert }) => {
     };
 
     const handleInsert = () => {
-        onInsert({ rows, cols, data });
+        onInsert({ rows, cols, data, caption: name });
         onClose();
     };
 
@@ -44,6 +45,14 @@ const TableModal = ({ onClose, onInsert }) => {
                 <h3>Agregar Tabla</h3>
                 {step === 1 ? (
                     <div className="modal-body">
+                        <div className="form-group">
+                            <label>Nombre de la tabla:</label>
+                            <input
+                                placeholder="Ej: Resultados del experimento"
+                                value={name}
+                                onChange={e => setName(e.target.value)}
+                            />
+                        </div>
                         <div className="form-group">
                             <label>Filas:</label>
                             <input type="number" min="1" value={rows} onChange={e => setRows(parseInt(e.target.value))} />
@@ -233,11 +242,13 @@ function ThesisEditor() {
         title: "Mi Tesis",
         author: user?.name || "Nombre del autor",
         date: "Fecha de la tesis",
+        dedication: "",
+        acknowledgements: ""
     });
 
     const [intro, setIntro] = useState("");
     const [chapters, setChapters] = useState([
-        { id: "ch1", title: "Capítulo 1", content: "", images: [], tables: [], equations: [] }
+        { id: "ch1", title: "Capítulo 1", blocks: [{ id: Date.now(), type: 'text', content: "" }] }
     ]);
     const [conclusions, setConclusions] = useState("");
     const [bib, setBib] = useState(`@article{smith2023,\n  author = {Smith, Jane},\n  title = {Un gran paper},\n  journal = {Revista de Ejemplo},\n  year = {2023}\n}`);
@@ -258,10 +269,7 @@ function ThesisEditor() {
                 id: ch.id,
                 title: ch.title || `Capítulo ${idx + 1}`,
                 level: 2,
-                content: ch.content || "",
-                images: ch.images || [],
-                tables: ch.tables || [],
-                equations: ch.equations || []
+                blocks: ch.blocks || [] // Pass blocks to export
             }))
         },
         { id: "conclusions", title: "Conclusiones", level: 1, content: conclusions }
@@ -284,7 +292,21 @@ function ThesisEditor() {
                     const saved = docSnap.data();
                     if (saved.meta) setMeta(saved.meta);
                     if (saved.intro) setIntro(saved.intro);
-                    if (saved.chapters && Array.isArray(saved.chapters)) setChapters(saved.chapters);
+                    if (saved.chapters && Array.isArray(saved.chapters)) {
+                        // MIGRATION LOGIC: Convert legacy fields to blocks if blocks are missing
+                        const migrated = saved.chapters.map(ch => {
+                            if (ch.blocks && Array.isArray(ch.blocks)) return ch;
+                            const newBlocks = [];
+                            if (ch.content) newBlocks.push({ id: `txt-${Math.random()}`, type: 'text', content: ch.content });
+                            if (ch.images) ch.images.forEach(x => newBlocks.push({ type: 'image', ...x }));
+                            if (ch.tables) ch.tables.forEach(x => newBlocks.push({ type: 'table', ...x }));
+                            if (ch.equations) ch.equations.forEach(x => newBlocks.push({ type: 'equation', ...x }));
+                            // Default empty block if nothing exists
+                            if (newBlocks.length === 0) newBlocks.push({ id: Date.now(), type: 'text', content: "" });
+                            return { ...ch, blocks: newBlocks };
+                        });
+                        setChapters(migrated);
+                    }
                     if (saved.conclusions) setConclusions(saved.conclusions);
                     if (saved.bib) setBib(saved.bib);
                 } else {
@@ -309,7 +331,7 @@ function ThesisEditor() {
             await setDoc(doc(db, "theses", user.uid), {
                 meta,
                 intro,
-                chapters, // Las imagenes dentro de chapters ya deben tener URL de Storage, no File objects
+                chapters, // Now contains blocks
                 conclusions,
                 bib,
                 updatedAt: new Date()
@@ -343,11 +365,12 @@ function ThesisEditor() {
             const snapshot = await uploadBytes(storageRef, file);
             const url = await getDownloadURL(snapshot.ref);
 
-            // 2. Guardar URL en el estado local
+            // 2. Guardar URL en el estado local como un bloque
             setChapters(chapters.map((ch, i) => i === idx ? {
                 ...ch,
-                images: [...(ch.images || []), {
+                blocks: [...(ch.blocks || []), {
                     id: Date.now(),
+                    type: "image",
                     url: url, // Guardamos URL remota
                     storagePath: snapshot.ref.fullPath, // Guardamos path para poder borrar luego
                     filename: file.name,
@@ -362,17 +385,18 @@ function ThesisEditor() {
         }
     }
 
-    async function removeImageFromChapter(idx, imgId) {
-        const chapter = chapters[idx];
-        const image = chapter.images.find(x => x.id === imgId);
+    async function removeBlock(chapterIdx, blockId) {
+        const chapter = chapters[chapterIdx];
+        const block = chapter.blocks.find(x => x.id === blockId);
+        if (!block) return;
 
-        // Borrar de storage si existe path
-        if (image && image.storagePath) {
-            const imageRef = ref(storage, image.storagePath);
+        // Borrar de storage si es imagen
+        if (block.type === 'image' && block.storagePath) {
+            const imageRef = ref(storage, block.storagePath);
             deleteObject(imageRef).catch(err => console.error("Error deleting from storage", err));
         }
 
-        setChapters(chapters.map((ch, i) => i === idx ? { ...ch, images: ch.images.filter(x => x.id !== imgId) } : ch));
+        setChapters(chapters.map((ch, i) => i === chapterIdx ? { ...ch, blocks: ch.blocks.filter(x => x.id !== blockId) } : ch));
     }
 
     // --- ACCIONES EXPORT ---
@@ -427,13 +451,7 @@ function ThesisEditor() {
             ...chapters.map(ch => ({
                 title: ch.title,
                 level: 1,
-                content: ch.content,
-                // Para Latex builder necesitamos pasarle el CONTENIDO binario o base64 si queremos que lo empaquete?
-                // El util de latex actualmente no maneja descarga de imagenes remotas auto.
-                // Por ahora pasamos metadatos. El ZIP es el que importa para imagenes.
-                images: ch.images,
-                tables: ch.tables,
-                equations: ch.equations
+                blocks: ch.blocks
             })),
             { title: "Conclusiones", level: 1, content: conclusions, unnumbered: true }
         ];
@@ -453,12 +471,12 @@ function ThesisEditor() {
         // Descargar imagenes remotas para el ZIP
         const imageFiles = [];
         for (const ch of chapters) {
-            if (!ch.images) continue;
-            for (const im of ch.images) {
-                if (im.url) {
-                    const blob = await fetchImageBlob(im.url);
+            if (!ch.blocks) continue;
+            for (const b of ch.blocks) {
+                if (b.type === 'image' && b.url) {
+                    const blob = await fetchImageBlob(b.url);
                     if (blob) {
-                        imageFiles.push({ name: `images/${im.filename}`, content: blob });
+                        imageFiles.push({ name: `images/${b.filename}`, content: blob });
                     }
                 }
             }
@@ -469,14 +487,22 @@ function ThesisEditor() {
     }
 
     // --- HELPERS DE EDICIÓN ---
-    const addChapter = () => setChapters([...chapters, { id: `ch${chapters.length + 1}`, title: `Capítulo ${chapters.length + 1}`, content: "", images: [], tables: [], equations: [] }]);
+    const addChapter = () => setChapters([...chapters, { id: `ch${chapters.length + 1}`, title: `Capítulo ${chapters.length + 1}`, blocks: [{ id: Date.now(), type: 'text', content: "" }] }]);
     const removeChapter = (idx) => setChapters(chapters.filter((_, i) => i !== idx));
     const updateChapter = (idx, field, value) => setChapters(chapters.map((ch, i) => i === idx ? { ...ch, [field]: value } : ch));
 
-    const updateItemMeta = (type, idx, itemId, field, value) => {
-        setChapters(chapters.map((ch, i) => i === idx ? {
+    const updateBlock = (chapterIdx, blockId, field, value) => {
+        setChapters(chapters.map((ch, i) => i === chapterIdx ? {
             ...ch,
-            [type]: (ch[type] || []).map(item => item.id === itemId ? { ...item, [field]: value } : item)
+            blocks: ch.blocks.map(b => b.id === blockId ? { ...b, [field]: value } : b)
+        } : ch));
+    };
+
+    // Unificar la actualización de datos profundos (ej data de tabla)
+    const updateBlockData = (chapterIdx, blockId, newData) => {
+        setChapters(chapters.map((ch, i) => i === chapterIdx ? {
+            ...ch,
+            blocks: ch.blocks.map(b => b.id === blockId ? { ...b, ...newData } : b)
         } : ch));
     };
 
@@ -492,14 +518,22 @@ function ThesisEditor() {
     };
     const insertTable = (tableData) => {
         if (activeChapterIdx === null) return;
-        setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, tables: [...(ch.tables || []), { id: Date.now(), ...tableData }] } : ch));
+        setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, blocks: [...(ch.blocks || []), { id: Date.now(), type: 'table', ...tableData }] } : ch));
     };
     const insertEquation = (eqData) => {
         if (activeChapterIdx === null) return;
-        setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, equations: [...(ch.equations || []), { id: Date.now(), ...eqData }] } : ch));
+        setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, blocks: [...(ch.blocks || []), { id: Date.now(), type: 'equation', ...eqData }] } : ch));
     };
-    const removeTable = (idx, id) => { setChapters(chapters.map((ch, i) => i === idx ? { ...ch, tables: ch.tables.filter(x => x.id !== id) } : ch)); };
-    const removeEquation = (idx, id) => { setChapters(chapters.map((ch, i) => i === idx ? { ...ch, equations: ch.equations.filter(x => x.id !== id) } : ch)); };
+    const insertTerm = (termData) => {
+        // Implement if needed for terms, otherwise ignore
+    };
+
+    const insertTextBlock = (chapterIdx) => {
+        setChapters(chapters.map((ch, i) => i === chapterIdx ? {
+            ...ch,
+            blocks: [...(ch.blocks || []), { id: Date.now(), type: 'text', content: "" }]
+        } : ch));
+    };
 
     const insertReference = (bibEntry) => {
         setBib(prev => prev + "\n\n" + bibEntry);
@@ -574,6 +608,29 @@ function ThesisEditor() {
                             />
                         </div>
                     </div>
+
+                    <div className="meta-group" style={{ flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
+                        <div>
+                            <span className="label-small">Dedicatoria</span>
+                            <textarea
+                                className="input-ghost textarea-content"
+                                value={meta.dedication || ""}
+                                onChange={e => handleResize(e, val => setMeta({ ...meta, dedication: val }))}
+                                placeholder="Escribe tu dedicatoria..."
+                                style={{ minHeight: '3rem', fontStyle: 'italic' }}
+                            />
+                        </div>
+                        <div>
+                            <span className="label-small">Agradecimientos</span>
+                            <textarea
+                                className="input-ghost textarea-content"
+                                value={meta.acknowledgements || ""}
+                                onChange={e => handleResize(e, val => setMeta({ ...meta, acknowledgements: val }))}
+                                placeholder="Escribe tus agradecimientos..."
+                                style={{ minHeight: '3rem' }}
+                            />
+                        </div>
+                    </div>
                 </div>
 
                 {/* Bloque: Introducción */}
@@ -607,69 +664,69 @@ function ThesisEditor() {
                                 </button>
                             </div>
 
-                            <textarea
-                                className="input-ghost textarea-content"
-                                value={ch.content}
-                                onChange={e => {
-                                    updateChapter(idx, "content", e.target.value);
-                                    e.target.style.height = 'auto';
-                                    e.target.style.height = e.target.scrollHeight + 'px';
-                                }}
-                                placeholder="Empieza a escribir..."
-                            />
-
-                            {/* Grid de Imágenes */}
-                            {ch.images && ch.images.length > 0 && (
-                                <div className="media-grid">
-                                    {ch.images.map(im => (
-                                        <div key={im.id} className="image-card">
-                                            {im.url ? <img src={im.url} alt="preview" style={{ maxHeight: '100px', maxWidth: '100%', marginBottom: '0.5rem' }} /> : <span className="label-small">Subiendo...</span>}
-                                            <span className="label-small">{im.filename}</span>
-                                            <button
-                                                onClick={() => removeImageFromChapter(idx, im.id)}
-                                                className="btn-close-card"
-                                            >×</button>
-                                            <input
-                                                className="input-ghost caption-input"
-                                                value={im.caption}
-                                                onChange={e => updateItemMeta('images', idx, im.id, 'caption', e.target.value)}
-                                                placeholder="Escribe un pie de foto..."
+                            {/* Bloques de Contenido */}
+                            <div className="blocks-container" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+                                {(ch.blocks || []).map(block => (
+                                    <div key={block.id} className="content-block" style={{ position: 'relative' }}>
+                                        {/* TEXT BLOCK */}
+                                        {block.type === 'text' && (
+                                            <textarea
+                                                className="input-ghost textarea-content"
+                                                value={block.content || ""}
+                                                onChange={e => {
+                                                    updateBlock(idx, block.id, "content", e.target.value);
+                                                    e.target.style.height = 'auto';
+                                                    e.target.style.height = e.target.scrollHeight + 'px';
+                                                }}
+                                                placeholder="Escribe aquí..."
+                                                style={{ minHeight: '3rem' }}
                                             />
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                                        )}
 
-                            {/* Lista de Tablas */}
-                            {ch.tables && ch.tables.length > 0 && (
-                                <div className="media-list">
-                                    <h4>Tablas</h4>
-                                    {ch.tables.map(tbl => (
-                                        <div key={tbl.id} className="media-item">
-                                            <span>Tabla ({tbl.rows}x{tbl.cols})</span>
-                                            <button onClick={() => removeTable(idx, tbl.id)} className="btn-small-danger">Eliminar</button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                                        {/* IMAGE BLOCK */}
+                                        {block.type === 'image' && (
+                                            <div className="image-card" style={{ maxWidth: '300px', margin: '0.5rem 0' }}>
+                                                {block.url ? <img src={block.url} alt="preview" style={{ maxHeight: '200px', maxWidth: '100%', marginBottom: '0.5rem', borderRadius: '4px' }} /> : <span className="label-small">Subiendo...</span>}
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span className="label-small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{block.filename}</span>
+                                                    <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                                </div>
+                                                <input
+                                                    className="input-ghost caption-input"
+                                                    value={block.caption || ""}
+                                                    onChange={e => updateBlock(idx, block.id, 'caption', e.target.value)}
+                                                    placeholder="Pie de foto..."
+                                                    style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}
+                                                />
+                                            </div>
+                                        )}
 
-                            {/* Lista de Ecuaciones */}
-                            {ch.equations && ch.equations.length > 0 && (
-                                <div className="media-list">
-                                    <h4>Ecuaciones</h4>
-                                    {ch.equations.map(eq => (
-                                        <div key={eq.id} className="media-item">
-                                            <code>{eq.content}</code>
-                                            <button onClick={() => removeEquation(idx, eq.id)} className="btn-small-danger">Eliminar</button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                                        {/* TABLE BLOCK */}
+                                        {block.type === 'table' && (
+                                            <div className="media-item" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '1rem', border: '1px solid #eee', borderRadius: '8px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '0.5rem' }}>
+                                                    <span style={{ fontWeight: 600, color: '#374151' }}>Tabla: {block.caption || "(Sin nombre)"}</span>
+                                                    <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                                </div>
+                                                <div className="label-small">Dimensiones: {block.rows}x{block.cols}</div>
+                                            </div>
+                                        )}
 
+                                        {/* EQUATION BLOCK */}
+                                        {block.type === 'equation' && (
+                                            <div className="media-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', border: '1px solid #eee', borderRadius: '8px' }}>
+                                                <code style={{ fontSize: '1.1rem' }}>{block.content}</code>
+                                                <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
 
-                            {/* Herramientas Flotantes */}
-                            <div className="hover-toolbar">
-                                <label className="tool-btn">
+                            {/* Herramientas Flotantes (Ahora añaden al final) */}
+                            <div className="hover-toolbar" style={{ marginTop: '1.5rem', padding: '1rem', border: '2px dashed #e5e7eb', borderRadius: '0.75rem', display: 'flex', gap: '1rem', justifyContent: 'center', backgroundColor: '#f9fafb' }}>
+                                <button className="tool-btn" onClick={() => insertTextBlock(idx)}>+ Texto</button>
+                                <label className="tool-btn" style={{ cursor: 'pointer' }}>
                                     <span>+ Imagen</span>
                                     <input type="file" className="hidden" accept="image/*" style={{ display: 'none' }} onChange={e => addImageToChapter(idx, e.target.files?.[0])} />
                                 </label>
