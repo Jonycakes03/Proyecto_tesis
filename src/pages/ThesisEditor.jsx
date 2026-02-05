@@ -23,18 +23,18 @@ const downloadText = (filename, content) => {
 
 // --- COMPONENTES INTERNOS DE MODAL ---
 
-const TableModal = ({ onClose, onInsert }) => {
-    const [rows, setRows] = useState(2);
-    const [cols, setCols] = useState(2);
-    const [name, setName] = useState("");
+const TableModal = ({ onClose, onInsert, isEditing = false, existingData = null }) => {
+    const [rows, setRows] = useState(existingData?.rows || 2);
+    const [cols, setCols] = useState(existingData?.cols || 2);
+    const [name, setName] = useState(existingData?.caption || "");
     const [step, setStep] = useState(1); // 1: Config, 2: Data
-    const [data, setData] = useState({});
+    const [data, setData] = useState(existingData?.data || {});
 
     const handleCellChange = (r, c, val) => {
         setData({ ...data, [`${r}-${c}`]: val });
     };
 
-    const handleInsert = () => {
+    const handleSave = () => {
         onInsert({ rows, cols, data, caption: name });
         onClose();
     };
@@ -42,7 +42,7 @@ const TableModal = ({ onClose, onInsert }) => {
     return (
         <div className="modal-overlay">
             <div className="modal-content">
-                <h3>Agregar Tabla</h3>
+                <h3>{isEditing ? "Editar Tabla" : "Agregar Tabla"}</h3>
                 {step === 1 ? (
                     <div className="modal-body">
                         <div className="form-group">
@@ -84,7 +84,7 @@ const TableModal = ({ onClose, onInsert }) => {
                         </div>
                         <div className="modal-actions">
                             <button onClick={() => setStep(1)}>Atrás</button>
-                            <button onClick={handleInsert}>Insertar</button>
+                            <button onClick={handleSave}>{isEditing ? "Guardar" : "Insertar"}</button>
                         </div>
                     </div>
                 )}
@@ -93,10 +93,10 @@ const TableModal = ({ onClose, onInsert }) => {
     );
 };
 
-const EquationModal = ({ onClose, onInsert }) => {
-    const [content, setContent] = useState("");
+const EquationModal = ({ onClose, onInsert, isEditing = false, existingData = null }) => {
+    const [content, setContent] = useState(existingData?.content || "");
 
-    const handleInsert = () => {
+    const handleSave = () => {
         onInsert({ content });
         onClose();
     };
@@ -104,7 +104,7 @@ const EquationModal = ({ onClose, onInsert }) => {
     return (
         <div className="modal-overlay">
             <div className="modal-content">
-                <h3>Agregar Ecuación</h3>
+                <h3>{isEditing ? "Editar Ecuación" : "Agregar Ecuación"}</h3>
                 <div className="modal-body">
                     <textarea
                         placeholder="Escribe tu ecuación en LaTeX (ej: E = mc^2)"
@@ -115,7 +115,7 @@ const EquationModal = ({ onClose, onInsert }) => {
                     />
                     <div className="modal-actions">
                         <button onClick={onClose}>Cancelar</button>
-                        <button onClick={handleInsert}>Insertar</button>
+                        <button onClick={handleSave}>{isEditing ? "Guardar" : "Insertar"}</button>
                     </div>
                 </div>
             </div>
@@ -256,6 +256,8 @@ function ThesisEditor() {
     // Modal State
     const [activeModal, setActiveModal] = useState(null); // 'table' | 'equation' | 'reference' | null
     const [activeChapterIdx, setActiveChapterIdx] = useState(null);
+    const [editingTableId, setEditingTableId] = useState(null); // Para edición de tabla
+    const [editingEquationId, setEditingEquationId] = useState(null); // Para edición de ecuación
 
 
     // Estructura lógica para exportar
@@ -511,18 +513,49 @@ function ThesisEditor() {
     const openModal = (type, idx) => {
         setActiveModal(type);
         setActiveChapterIdx(idx);
+        setEditingTableId(null);
+        setEditingEquationId(null);
+    };
+    const openTableEditModal = (idx, blockId) => {
+        setActiveModal('table');
+        setActiveChapterIdx(idx);
+        setEditingTableId(blockId);
+        setEditingEquationId(null);
+    };
+    const openEquationEditModal = (idx, blockId) => {
+        setActiveModal('equation');
+        setActiveChapterIdx(idx);
+        setEditingEquationId(blockId);
+        setEditingTableId(null);
     };
     const closeModal = () => {
         setActiveModal(null);
         setActiveChapterIdx(null);
+        setEditingTableId(null);
+        setEditingEquationId(null);
     };
     const insertTable = (tableData) => {
         if (activeChapterIdx === null) return;
-        setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, blocks: [...(ch.blocks || []), { id: Date.now(), type: 'table', ...tableData }] } : ch));
+        if (editingTableId !== null) {
+            // Editar tabla existente
+            updateBlock(activeChapterIdx, editingTableId, 'rows', tableData.rows);
+            updateBlock(activeChapterIdx, editingTableId, 'cols', tableData.cols);
+            updateBlock(activeChapterIdx, editingTableId, 'data', tableData.data);
+            updateBlock(activeChapterIdx, editingTableId, 'caption', tableData.caption);
+        } else {
+            // Insertar tabla nueva
+            setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, blocks: [...(ch.blocks || []), { id: Date.now(), type: 'table', ...tableData }] } : ch));
+        }
     };
     const insertEquation = (eqData) => {
         if (activeChapterIdx === null) return;
-        setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, blocks: [...(ch.blocks || []), { id: Date.now(), type: 'equation', ...eqData }] } : ch));
+        if (editingEquationId !== null) {
+            // Editar ecuación existente
+            updateBlock(activeChapterIdx, editingEquationId, 'content', eqData.content);
+        } else {
+            // Insertar ecuación nueva
+            setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, blocks: [...(ch.blocks || []), { id: Date.now(), type: 'equation', ...eqData }] } : ch));
+        }
     };
     const insertTerm = (termData) => {
         // Implement if needed for terms, otherwise ignore
@@ -706,7 +739,10 @@ function ThesisEditor() {
                                             <div className="media-item" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '1rem', border: '1px solid #eee', borderRadius: '8px' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '0.5rem' }}>
                                                     <span style={{ fontWeight: 600, color: '#374151' }}>Tabla: {block.caption || "(Sin nombre)"}</span>
-                                                    <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                        <button onClick={() => openTableEditModal(idx, block.id)} className="btn-small-danger" style={{ color: '#3b82f6', cursor: 'pointer' }}>Editar</button>
+                                                        <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                                    </div>
                                                 </div>
                                                 <div className="label-small">Dimensiones: {block.rows}x{block.cols}</div>
                                             </div>
@@ -716,7 +752,10 @@ function ThesisEditor() {
                                         {block.type === 'equation' && (
                                             <div className="media-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', border: '1px solid #eee', borderRadius: '8px' }}>
                                                 <code style={{ fontSize: '1.1rem' }}>{block.content}</code>
-                                                <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                    <button onClick={() => openEquationEditModal(idx, block.id)} className="btn-small-danger" style={{ color: '#3b82f6', cursor: 'pointer' }}>Editar</button>
+                                                    <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -775,8 +814,22 @@ function ThesisEditor() {
             </main>
 
             {/* MODALES */}
-            {activeModal === 'table' && <TableModal onClose={closeModal} onInsert={insertTable} />}
-            {activeModal === 'equation' && <EquationModal onClose={closeModal} onInsert={insertEquation} />}
+            {activeModal === 'table' && (
+                <TableModal 
+                    onClose={closeModal} 
+                    onInsert={insertTable}
+                    isEditing={editingTableId !== null}
+                    existingData={editingTableId !== null && activeChapterIdx !== null ? chapters[activeChapterIdx].blocks.find(b => b.id === editingTableId) : null}
+                />
+            )}
+            {activeModal === 'equation' && (
+                <EquationModal 
+                    onClose={closeModal} 
+                    onInsert={insertEquation}
+                    isEditing={editingEquationId !== null}
+                    existingData={editingEquationId !== null && activeChapterIdx !== null ? chapters[activeChapterIdx].blocks.find(b => b.id === editingEquationId) : null}
+                />
+            )}
             {activeModal === 'reference' && <ReferenceModal onClose={() => setActiveModal(null)} onInsert={insertReference} />}
 
         </div>

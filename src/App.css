@@ -404,6 +404,12 @@ body {
   padding: 0.5rem;
   border: 1px solid var(--border-color);
   border-radius: 0.25rem;
+  color: var(--text-main);
+  font-size: 0.875rem;
+}
+
+.form-group input::placeholder {
+  color: var(--text-placeholder);
 }
 
 .modal-actions {
@@ -411,6 +417,22 @@ body {
   justify-content: flex-end;
   gap: 1rem;
   margin-top: 1.5rem;
+}
+
+.modal-actions button {
+  padding: 0.5rem 1rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  background-color: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+}
+
+.modal-actions button:hover {
+  background-color: #374151;
 }
 
 .table-grid {
@@ -424,6 +446,12 @@ body {
   padding: 0.25rem;
   border: 1px solid var(--border-color);
   text-align: center;
+  color: var(--text-main);
+  font-size: 0.875rem;
+}
+
+.table-grid input::placeholder {
+  color: var(--text-placeholder);
 }
 
 /* --- Media Lists (Tables, Equations) --- */
