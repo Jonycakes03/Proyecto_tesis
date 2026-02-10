@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { ActionButton } from "../components";
 import "../app.css";
+import "katex/dist/katex.min.css";
+import { BlockMath } from "react-katex";
 import { downloadZip } from "../utils/zipDownload";
 import { buildTex } from "../utils/latexExport";
 import { useAuth } from "../context/AuthContext";
@@ -27,7 +29,6 @@ const TableModal = ({ onClose, onInsert }) => {
     const [rows, setRows] = useState(2);
     const [cols, setCols] = useState(2);
     const [name, setName] = useState("");
-    const [step, setStep] = useState(1); // 1: Config, 2: Data
     const [data, setData] = useState({});
 
     const handleCellChange = (r, c, val) => {
@@ -39,55 +40,82 @@ const TableModal = ({ onClose, onInsert }) => {
         onClose();
     };
 
+    const addRow = () => setRows(prev => prev + 1);
+    const addCol = () => setCols(prev => prev + 1);
+    const removeRow = () => {
+        setRows(prev => {
+            const next = Math.max(1, prev - 1);
+            if (next !== prev) {
+                setData(current => {
+                    const updated = { ...current };
+                    Object.keys(updated).forEach(key => {
+                        const [r] = key.split("-").map(Number);
+                        if (r >= next) delete updated[key];
+                    });
+                    return updated;
+                });
+            }
+            return next;
+        });
+    };
+    const removeCol = () => {
+        setCols(prev => {
+            const next = Math.max(1, prev - 1);
+            if (next !== prev) {
+                setData(current => {
+                    const updated = { ...current };
+                    Object.keys(updated).forEach(key => {
+                        const [, c] = key.split("-").map(Number);
+                        if (c >= next) delete updated[key];
+                    });
+                    return updated;
+                });
+            }
+            return next;
+        });
+    };
+
     return (
         <div className="modal-overlay">
             <div className="modal-content">
                 <h3>Agregar Tabla</h3>
-                {step === 1 ? (
-                    <div className="modal-body">
-                        <div className="form-group">
-                            <label>Nombre de la tabla:</label>
-                            <input
-                                placeholder="Ej: Resultados del experimento"
-                                value={name}
-                                onChange={e => setName(e.target.value)}
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label>Filas:</label>
-                            <input type="number" min="1" value={rows} onChange={e => setRows(parseInt(e.target.value))} />
-                        </div>
-                        <div className="form-group">
-                            <label>Columnas:</label>
-                            <input type="number" min="1" value={cols} onChange={e => setCols(parseInt(e.target.value))} />
-                        </div>
-                        <div className="modal-actions">
-                            <button onClick={onClose}>Cancelar</button>
-                            <button onClick={() => setStep(2)}>Siguiente</button>
-                        </div>
+                <div className="modal-body">
+                    <div className="form-group">
+                        <label>Nombre de la tabla:</label>
+                        <input
+                            placeholder="Ej: Resultados del experimento"
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                        />
                     </div>
-                ) : (
-                    <div className="modal-body">
-                        <div className="table-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-                            {Array.from({ length: rows * cols }).map((_, idx) => {
-                                const r = Math.floor(idx / cols);
-                                const c = idx % cols;
-                                return (
-                                    <input
-                                        key={`${r}-${c}`}
-                                        placeholder={`(${r + 1},${c + 1})`}
-                                        value={data[`${r}-${c}`] || ""}
-                                        onChange={e => handleCellChange(r, c, e.target.value)}
-                                    />
-                                );
-                            })}
-                        </div>
-                        <div className="modal-actions">
-                            <button onClick={() => setStep(1)}>Atrás</button>
-                            <button onClick={handleInsert}>Insertar</button>
-                        </div>
+
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                        <button type="button" className="btn btn-secondary" onClick={addRow}>+ Fila</button>
+                        <button type="button" className="btn btn-secondary" onClick={addCol}>+ Columna</button>
+                        <button type="button" className="btn btn-secondary" onClick={removeRow}>- Fila</button>
+                        <button type="button" className="btn btn-secondary" onClick={removeCol}>- Columna</button>
                     </div>
-                )}
+
+                    <div className="table-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+                        {Array.from({ length: rows * cols }).map((_, idx) => {
+                            const r = Math.floor(idx / cols);
+                            const c = idx % cols;
+                            return (
+                                <input
+                                    key={`${r}-${c}`}
+                                    placeholder={`(${r + 1},${c + 1})`}
+                                    value={data[`${r}-${c}`] || ""}
+                                    onChange={e => handleCellChange(r, c, e.target.value)}
+                                />
+                            );
+                        })}
+                    </div>
+
+                    <div className="modal-actions">
+                        <button onClick={onClose}>Cancelar</button>
+                        <button onClick={handleInsert}>Insertar</button>
+                    </div>
+                </div>
             </div>
         </div>
     );
@@ -95,6 +123,72 @@ const TableModal = ({ onClose, onInsert }) => {
 
 const EquationModal = ({ onClose, onInsert }) => {
     const [content, setContent] = useState("");
+    const textareaRef = React.useRef(null);
+
+    const insertAtCursor = (latex) => {
+        const el = textareaRef.current;
+        if (!el) return;
+        const start = el.selectionStart ?? content.length;
+        const end = el.selectionEnd ?? content.length;
+        const next = content.slice(0, start) + latex + content.slice(end);
+        setContent(next);
+        requestAnimationFrame(() => {
+            el.focus();
+            const pos = start + latex.length;
+            el.setSelectionRange(pos, pos);
+        });
+    };
+
+    const wrapSelection = (left, right = "") => {
+        const el = textareaRef.current;
+        if (!el) return;
+        const start = el.selectionStart ?? content.length;
+        const end = el.selectionEnd ?? content.length;
+        const selected = content.slice(start, end) || " ";
+        const next = content.slice(0, start) + left + selected + right + content.slice(end);
+        setContent(next);
+        requestAnimationFrame(() => {
+            el.focus();
+            const pos = start + left.length + selected.length;
+            el.setSelectionRange(pos, pos);
+        });
+    };
+
+    const SYMBOLS = [
+        { label: "α", latex: "\\alpha " },
+        { label: "β", latex: "\\beta " },
+        { label: "γ", latex: "\\gamma " },
+        { label: "Δ", latex: "\\Delta " },
+        { label: "θ", latex: "\\theta " },
+        { label: "λ", latex: "\\lambda " },
+        { label: "μ", latex: "\\mu " },
+        { label: "π", latex: "\\pi " },
+        { label: "σ", latex: "\\sigma " },
+        { label: "Ω", latex: "\\Omega " },
+        { label: "√", latex: "\\sqrt{}" },
+        { label: "∑", latex: "\\sum_{}^{}" },
+        { label: "∫", latex: "\\int_{}^{}" },
+        { label: "∞", latex: "\\infty " },
+        { label: "≈", latex: "\\approx " },
+        { label: "≠", latex: "\\neq " },
+        { label: "≤", latex: "\\leq " },
+        { label: "≥", latex: "\\geq " },
+        { label: "→", latex: "\\to " },
+        { label: "⇔", latex: "\\Leftrightarrow " },
+        { label: "×", latex: "\\times " },
+        { label: "·", latex: "\\cdot " },
+        { label: "±", latex: "\\pm " },
+        { label: "…", latex: "\\dots " }
+    ];
+
+    const TEMPLATES = [
+        { label: "Fracción", action: () => wrapSelection("\\frac{", "}") },
+        { label: "Raíz", action: () => insertAtCursor("\\sqrt{}") },
+        { label: "Supíndice", action: () => wrapSelection("^{", "}") },
+        { label: "Subíndice", action: () => wrapSelection("_{", "}") },
+        { label: "Paréntesis", action: () => wrapSelection("\\left(", "\\right)") },
+        { label: "Corchetes", action: () => wrapSelection("\\left[", "\\right]") }
+    ];
 
     const handleInsert = () => {
         onInsert({ content });
@@ -106,13 +200,47 @@ const EquationModal = ({ onClose, onInsert }) => {
             <div className="modal-content">
                 <h3>Agregar Ecuación</h3>
                 <div className="modal-body">
+                    <div className="eq-toolbar">
+                        <div className="eq-toolbar-row">
+                            {TEMPLATES.map(t => (
+                                <button key={t.label} type="button" className="eq-btn" onClick={t.action}>
+                                    {t.label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="eq-toolbar-row">
+                            {SYMBOLS.map(s => (
+                                <button key={s.label} type="button" className="eq-symbol" onClick={() => insertAtCursor(s.latex)}>
+                                    {s.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     <textarea
+                        ref={textareaRef}
                         placeholder="Escribe tu ecuación en LaTeX (ej: E = mc^2)"
                         value={content}
                         onChange={e => setContent(e.target.value)}
                         rows={5}
                         style={{ width: '100%' }}
                     />
+                    <div className="eq-preview">
+                        <div className="eq-preview-label">Vista previa</div>
+                        <div className="eq-preview-box">
+                            {content.trim() ? (
+                                <BlockMath
+                                    math={content}
+                                    errorColor="#ef4444"
+                                    renderError={(error) => (
+                                        <span className="eq-preview-error">{error.message}</span>
+                                    )}
+                                />
+                            ) : (
+                                <span className="eq-preview-empty">Sin ecuación</span>
+                            )}
+                        </div>
+                    </div>
                     <div className="modal-actions">
                         <button onClick={onClose}>Cancelar</button>
                         <button onClick={handleInsert}>Insertar</button>
@@ -703,20 +831,49 @@ function ThesisEditor() {
 
                                         {/* TABLE BLOCK */}
                                         {block.type === 'table' && (
-                                            <div className="media-item" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '1rem', border: '1px solid #eee', borderRadius: '8px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '0.5rem' }}>
+                                            <div className="media-item" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '1rem', border: '1px solid #eee', borderRadius: '8px', gap: '0.75rem' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
                                                     <span style={{ fontWeight: 600, color: '#374151' }}>Tabla: {block.caption || "(Sin nombre)"}</span>
                                                     <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
                                                 </div>
-                                                <div className="label-small">Dimensiones: {block.rows}x{block.cols}</div>
+                                                <div className="table-preview">
+                                                    <table>
+                                                        <tbody>
+                                                            {Array.from({ length: block.rows || 0 }).map((_, r) => (
+                                                                <tr key={`row-${r}`}>
+                                                                    {Array.from({ length: block.cols || 0 }).map((__, c) => (
+                                                                        <td key={`cell-${r}-${c}`}>
+                                                                            {block.data?.[`${r}-${c}`] || ""}
+                                                                        </td>
+                                                                    ))}
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
                                             </div>
                                         )}
 
                                         {/* EQUATION BLOCK */}
                                         {block.type === 'equation' && (
-                                            <div className="media-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', border: '1px solid #eee', borderRadius: '8px' }}>
-                                                <code style={{ fontSize: '1.1rem' }}>{block.content}</code>
-                                                <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                            <div className="media-item" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1rem', border: '1px solid #eee', borderRadius: '8px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                                    <span style={{ fontWeight: 600, color: '#374151' }}>Ecuación</span>
+                                                    <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                                </div>
+                                                <div className="eq-preview-box">
+                                                    {block.content?.trim() ? (
+                                                        <BlockMath
+                                                            math={block.content}
+                                                            errorColor="#ef4444"
+                                                            renderError={(error) => (
+                                                                <span className="eq-preview-error">{error.message}</span>
+                                                            )}
+                                                        />
+                                                    ) : (
+                                                        <span className="eq-preview-empty">Sin ecuación</span>
+                                                    )}
+                                                </div>
                                             </div>
                                         )}
                                     </div>
