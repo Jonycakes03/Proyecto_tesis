@@ -482,6 +482,38 @@ body {
   border-bottom: none;
 }
 
+.media-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  background: #ffffff;
+}
+
+.media-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.media-card-title {
+  font-weight: 600;
+  color: #374151;
+}
+
+.media-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.btn-inline {
+  color: #2563eb;
+}
+
 .btn-small-danger {
   color: var(--danger-color);
   background: none;

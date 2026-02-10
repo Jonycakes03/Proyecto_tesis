@@ -25,18 +25,25 @@ const downloadText = (filename, content) => {
 
 // --- COMPONENTES INTERNOS DE MODAL ---
 
-const TableModal = ({ onClose, onInsert }) => {
-    const [rows, setRows] = useState(2);
-    const [cols, setCols] = useState(2);
-    const [name, setName] = useState("");
-    const [step, setStep] = useState(1); // 1: Config, 2: Data
-    const [data, setData] = useState({});
+const TableModal = ({ onClose, onInsert, isEditing = false, existingData = null }) => {
+    const [rows, setRows] = useState(existingData?.rows ?? 2);
+    const [cols, setCols] = useState(existingData?.cols ?? 2);
+    const [name, setName] = useState(existingData?.caption ?? "");
+    const [data, setData] = useState(existingData?.data ?? {});
+
+    useEffect(() => {
+        if (!existingData) return;
+        setRows(existingData.rows ?? 2);
+        setCols(existingData.cols ?? 2);
+        setName(existingData.caption ?? "");
+        setData(existingData.data ?? {});
+    }, [existingData]);
 
     const handleCellChange = (r, c, val) => {
         setData({ ...data, [`${r}-${c}`]: val });
     };
 
-    const handleSave = () => {
+    const handleInsert = () => {
         onInsert({ rows, cols, data, caption: name });
         onClose();
     };
@@ -79,61 +86,124 @@ const TableModal = ({ onClose, onInsert }) => {
     return (
         <div className="modal-overlay">
             <div className="modal-content">
-                <h3>Agregar Tabla</h3>
-                {step === 1 ? (
-                    <div className="modal-body">
-                        <div className="form-group">
-                            <label>Nombre de la tabla:</label>
-                            <input
-                                placeholder="Ej: Resultados del experimento"
-                                value={name}
-                                onChange={e => setName(e.target.value)}
-                            />
-                        </div>
-                        <div className="form-group">
-                            <label>Filas:</label>
-                            <input type="number" min="1" value={rows} onChange={e => setRows(parseInt(e.target.value))} />
-                        </div>
-                        <div className="form-group">
-                            <label>Columnas:</label>
-                            <input type="number" min="1" value={cols} onChange={e => setCols(parseInt(e.target.value))} />
-                        </div>
-                        <div className="modal-actions">
-                            <button onClick={onClose}>Cancelar</button>
-                            <button onClick={() => setStep(2)}>Siguiente</button>
-                        </div>
+                <h3>{isEditing ? "Editar Tabla" : "Agregar Tabla"}</h3>
+                <div className="modal-body">
+                    <div className="form-group">
+                        <label>Nombre de la tabla:</label>
+                        <input
+                            placeholder="Ej: Resultados del experimento"
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                        />
                     </div>
-                ) : (
-                    <div className="modal-body">
-                        <div className="table-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-                            {Array.from({ length: rows * cols }).map((_, idx) => {
-                                const r = Math.floor(idx / cols);
-                                const c = idx % cols;
-                                return (
-                                    <input
-                                        key={`${r}-${c}`}
-                                        placeholder={`(${r + 1},${c + 1})`}
-                                        value={data[`${r}-${c}`] || ""}
-                                        onChange={e => handleCellChange(r, c, e.target.value)}
-                                    />
-                                );
-                            })}
-                        </div>
-                        <div className="modal-actions">
-                            <button onClick={() => setStep(1)}>Atrás</button>
-                            <button onClick={handleInsert}>Insertar</button>
-                        </div>
+
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                        <button type="button" className="btn btn-secondary" onClick={addRow}>+ Fila</button>
+                        <button type="button" className="btn btn-secondary" onClick={addCol}>+ Columna</button>
+                        <button type="button" className="btn btn-secondary" onClick={removeRow}>- Fila</button>
+                        <button type="button" className="btn btn-secondary" onClick={removeCol}>- Columna</button>
                     </div>
-                )}
+
+                    <div className="table-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+                        {Array.from({ length: rows * cols }).map((_, idx) => {
+                            const r = Math.floor(idx / cols);
+                            const c = idx % cols;
+                            return (
+                                <input
+                                    key={`${r}-${c}`}
+                                    placeholder={`(${r + 1},${c + 1})`}
+                                    value={data[`${r}-${c}`] || ""}
+                                    onChange={e => handleCellChange(r, c, e.target.value)}
+                                />
+                            );
+                        })}
+                    </div>
+
+                    <div className="modal-actions">
+                        <button onClick={onClose}>Cancelar</button>
+                        <button onClick={handleInsert}>{isEditing ? "Guardar" : "Insertar"}</button>
+                    </div>
+                </div>
             </div>
         </div>
     );
 };
 
-const EquationModal = ({ onClose, onInsert }) => {
-    const [content, setContent] = useState("");
+const EquationModal = ({ onClose, onInsert, isEditing = false, existingData = null }) => {
+    const [content, setContent] = useState(existingData?.content ?? "");
+    const textareaRef = React.useRef(null);
 
-    const handleSave = () => {
+    useEffect(() => {
+        if (!existingData) return;
+        setContent(existingData.content ?? "");
+    }, [existingData]);
+
+    const insertAtCursor = (latex) => {
+        const el = textareaRef.current;
+        if (!el) return;
+        const start = el.selectionStart ?? content.length;
+        const end = el.selectionEnd ?? content.length;
+        const next = content.slice(0, start) + latex + content.slice(end);
+        setContent(next);
+        requestAnimationFrame(() => {
+            el.focus();
+            const pos = start + latex.length;
+            el.setSelectionRange(pos, pos);
+        });
+    };
+
+    const wrapSelection = (left, right = "") => {
+        const el = textareaRef.current;
+        if (!el) return;
+        const start = el.selectionStart ?? content.length;
+        const end = el.selectionEnd ?? content.length;
+        const selected = content.slice(start, end) || " ";
+        const next = content.slice(0, start) + left + selected + right + content.slice(end);
+        setContent(next);
+        requestAnimationFrame(() => {
+            el.focus();
+            const pos = start + left.length + selected.length;
+            el.setSelectionRange(pos, pos);
+        });
+    };
+
+    const SYMBOLS = [
+        { label: "α", latex: "\\alpha " },
+        { label: "β", latex: "\\beta " },
+        { label: "γ", latex: "\\gamma " },
+        { label: "Δ", latex: "\\Delta " },
+        { label: "θ", latex: "\\theta " },
+        { label: "λ", latex: "\\lambda " },
+        { label: "μ", latex: "\\mu " },
+        { label: "π", latex: "\\pi " },
+        { label: "σ", latex: "\\sigma " },
+        { label: "Ω", latex: "\\Omega " },
+        { label: "√", latex: "\\sqrt{}" },
+        { label: "∑", latex: "\\sum_{}^{}" },
+        { label: "∫", latex: "\\int_{}^{}" },
+        { label: "∞", latex: "\\infty " },
+        { label: "≈", latex: "\\approx " },
+        { label: "≠", latex: "\\neq " },
+        { label: "≤", latex: "\\leq " },
+        { label: "≥", latex: "\\geq " },
+        { label: "→", latex: "\\to " },
+        { label: "⇔", latex: "\\Leftrightarrow " },
+        { label: "×", latex: "\\times " },
+        { label: "·", latex: "\\cdot " },
+        { label: "±", latex: "\\pm " },
+        { label: "…", latex: "\\dots " }
+    ];
+
+    const TEMPLATES = [
+        { label: "Fracción", action: () => wrapSelection("\\frac{", "}") },
+        { label: "Raíz", action: () => insertAtCursor("\\sqrt{}") },
+        { label: "Supíndice", action: () => wrapSelection("^{", "}") },
+        { label: "Subíndice", action: () => wrapSelection("_{", "}") },
+        { label: "Paréntesis", action: () => wrapSelection("\\left(", "\\right)") },
+        { label: "Corchetes", action: () => wrapSelection("\\left[", "\\right]") }
+    ];
+
+    const handleInsert = () => {
         onInsert({ content });
         onClose();
     };
@@ -186,7 +256,7 @@ const EquationModal = ({ onClose, onInsert }) => {
                     </div>
                     <div className="modal-actions">
                         <button onClick={onClose}>Cancelar</button>
-                        <button onClick={handleSave}>{isEditing ? "Guardar" : "Insertar"}</button>
+                        <button onClick={handleInsert}>{isEditing ? "Guardar" : "Insertar"}</button>
                     </div>
                 </div>
             </div>
@@ -807,11 +877,11 @@ function ThesisEditor() {
 
                                         {/* TABLE BLOCK */}
                                         {block.type === 'table' && (
-                                            <div className="media-item" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '1rem', border: '1px solid #eee', borderRadius: '8px', gap: '0.75rem' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                                                    <span style={{ fontWeight: 600, color: '#374151' }}>Tabla: {block.caption || "(Sin nombre)"}</span>
-                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                        <button onClick={() => openTableEditModal(idx, block.id)} className="btn-small-danger" style={{ color: '#3b82f6', cursor: 'pointer' }}>Editar</button>
+                                            <div className="media-card">
+                                                <div className="media-card-header">
+                                                    <span className="media-card-title">Tabla: {block.caption || "(Sin nombre)"}</span>
+                                                    <div className="media-card-actions">
+                                                        <button onClick={() => openTableEditModal(idx, block.id)} className="btn-small-danger btn-inline">Editar</button>
                                                         <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
                                                     </div>
                                                 </div>
@@ -835,9 +905,27 @@ function ThesisEditor() {
 
                                         {/* EQUATION BLOCK */}
                                         {block.type === 'equation' && (
-                                            <div className="media-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', border: '1px solid #eee', borderRadius: '8px' }}>
-                                                <code style={{ fontSize: '1.1rem' }}>{block.content}</code>
-                                                <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                            <div className="media-card">
+                                                <div className="media-card-header">
+                                                    <span className="media-card-title">Ecuacion</span>
+                                                    <div className="media-card-actions">
+                                                        <button onClick={() => openEquationEditModal(idx, block.id)} className="btn-small-danger btn-inline">Editar</button>
+                                                        <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                                    </div>
+                                                </div>
+                                                <div className="eq-preview-box">
+                                                    {block.content?.trim() ? (
+                                                        <BlockMath
+                                                            math={block.content}
+                                                            errorColor="#ef4444"
+                                                            renderError={(error) => (
+                                                                <span className="eq-preview-error">{error.message}</span>
+                                                            )}
+                                                        />
+                                                    ) : (
+                                                        <span className="eq-preview-empty">Sin ecuacion</span>
+                                                    )}
+                                                </div>
                                             </div>
                                         )}
                                     </div>
