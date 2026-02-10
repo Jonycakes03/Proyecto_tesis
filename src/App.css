@@ -608,3 +608,54 @@ body {
   min-width: 3rem;
   text-align: center;
 }
+
+/* Mantén el main centrado */
+.editor-main {
+  max-width: 64rem;
+  width: 100%;
+}
+
+.editor-layout {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.sidebar {
+  position: sticky;
+  top: 64px;
+  align-self: flex-start;
+  width: 220px;
+  padding: 1rem;
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-color);
+  height: calc(100vh - 64px);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.sidebar-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.sidebar-link {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-main);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.sidebar-link:hover {
+  background: var(--hover-bg);
+  border-color: var(--border-color);
+}

@@ -721,6 +721,11 @@ function ThesisEditor() {
         e.target.style.height = e.target.scrollHeight + 'px';
     };
 
+    const goToChapter = (chapterId) => {
+        const el = document.getElementById(`chapter-${chapterId}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+
     // --- RENDERIZADO ---
     if (loading) {
         return <div className="app-container" style={{ justifyContent: 'center', alignItems: 'center' }}>Cargando datos de la nube...</div>;
@@ -750,238 +755,262 @@ function ThesisEditor() {
                 </div>
             </nav>
 
-            {/* Área Principal de Edición */}
-            <main className="editor-main">
-
-                {/* Bloque: Portada */}
-                <div className="section-block">
-                    <input
-                        className="input-ghost input-h1"
-                        value={meta.title}
-                        onChange={e => setMeta({ ...meta, title: e.target.value })}
-                        placeholder="Título de la Tesis"
-                    />
-
-                    <div className="meta-group">
-                        <div className="meta-item">
-                            <span className="label-small">Autor</span>
-                            <input
-                                className="input-ghost input-meta"
-                                value={meta.author}
-                                onChange={e => setMeta({ ...meta, author: e.target.value })}
-                                placeholder="Tu Nombre"
-                            />
-                        </div>
-                        <div className="meta-item">
-                            <span className="label-small">Fecha</span>
-                            <input
-                                className="input-ghost input-meta"
-                                value={meta.date}
-                                onChange={e => setMeta({ ...meta, date: e.target.value })}
-                                placeholder="Seleccionar fecha"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="meta-group" style={{ flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
-                        <div>
-                            <span className="label-small">Dedicatoria</span>
-                            <textarea
-                                className="input-ghost textarea-content"
-                                value={meta.dedication || ""}
-                                onChange={e => handleResize(e, val => setMeta({ ...meta, dedication: val }))}
-                                placeholder="Escribe tu dedicatoria..."
-                                style={{ minHeight: '3rem', fontStyle: 'italic' }}
-                            />
-                        </div>
-                        <div>
-                            <span className="label-small">Agradecimientos</span>
-                            <textarea
-                                className="input-ghost textarea-content"
-                                value={meta.acknowledgements || ""}
-                                onChange={e => handleResize(e, val => setMeta({ ...meta, acknowledgements: val }))}
-                                placeholder="Escribe tus agradecimientos..."
-                                style={{ minHeight: '3rem' }}
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Bloque: Introducción */}
-                <section className="section-block">
-                    <div className="section-header">
-                        <h2 className="label-small">Introducción</h2>
-                    </div>
-                    <textarea
-                        className="input-ghost textarea-content"
-                        value={intro}
-                        onChange={e => handleResize(e, setIntro)}
-                        placeholder="Escribe una introducción..."
-                    />
-                </section>
-
-                {/* Bloque: Capítulos */}
-                <div className="section-block">
-                    {chapters.map((ch, idx) => (
-                        <section key={ch.id} className="chapter-block">
-
-                            <div className="chapter-title-row">
-                                <input
-                                    className="input-ghost input-h1"
-                                    style={{ fontSize: '2rem', marginBottom: 0 }}
-                                    value={ch.title}
-                                    onChange={e => updateChapter(idx, "title", e.target.value)}
-                                    placeholder="Título del Capítulo"
-                                />
-                                <button onClick={() => removeChapter(idx)} className="btn btn-danger">
-                                    Eliminar
-                                </button>
-                            </div>
-
-                            {/* Bloques de Contenido */}
-                            <div className="blocks-container" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
-                                {(ch.blocks || []).map(block => (
-                                    <div key={block.id} className="content-block" style={{ position: 'relative' }}>
-                                        {/* TEXT BLOCK */}
-                                        {block.type === 'text' && (
-                                            <textarea
-                                                className="input-ghost textarea-content"
-                                                value={block.content || ""}
-                                                onChange={e => {
-                                                    updateBlock(idx, block.id, "content", e.target.value);
-                                                    e.target.style.height = 'auto';
-                                                    e.target.style.height = e.target.scrollHeight + 'px';
-                                                }}
-                                                placeholder="Escribe aquí..."
-                                                style={{ minHeight: '3rem' }}
-                                            />
-                                        )}
-
-                                        {/* IMAGE BLOCK */}
-                                        {block.type === 'image' && (
-                                            <div className="image-card" style={{ maxWidth: '300px', margin: '0.5rem 0' }}>
-                                                {block.url ? <img src={block.url} alt="preview" style={{ maxHeight: '200px', maxWidth: '100%', marginBottom: '0.5rem', borderRadius: '4px' }} /> : <span className="label-small">Subiendo...</span>}
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <span className="label-small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{block.filename}</span>
-                                                    <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
-                                                </div>
-                                                <input
-                                                    className="input-ghost caption-input"
-                                                    value={block.caption || ""}
-                                                    onChange={e => updateBlock(idx, block.id, 'caption', e.target.value)}
-                                                    placeholder="Pie de foto..."
-                                                    style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}
-                                                />
-                                            </div>
-                                        )}
-
-                                        {/* TABLE BLOCK */}
-                                        {block.type === 'table' && (
-                                            <div className="media-card">
-                                                <div className="media-card-header">
-                                                    <span className="media-card-title">Tabla: {block.caption || "(Sin nombre)"}</span>
-                                                    <div className="media-card-actions">
-                                                        <button onClick={() => openTableEditModal(idx, block.id)} className="btn-small-danger btn-inline">Editar</button>
-                                                        <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
-                                                    </div>
-                                                </div>
-                                                <div className="table-preview">
-                                                    <table>
-                                                        <tbody>
-                                                            {Array.from({ length: block.rows || 0 }).map((_, r) => (
-                                                                <tr key={`row-${r}`}>
-                                                                    {Array.from({ length: block.cols || 0 }).map((__, c) => (
-                                                                        <td key={`cell-${r}-${c}`}>
-                                                                            {block.data?.[`${r}-${c}`] || ""}
-                                                                        </td>
-                                                                    ))}
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* EQUATION BLOCK */}
-                                        {block.type === 'equation' && (
-                                            <div className="media-card">
-                                                <div className="media-card-header">
-                                                    <span className="media-card-title">Ecuacion</span>
-                                                    <div className="media-card-actions">
-                                                        <button onClick={() => openEquationEditModal(idx, block.id)} className="btn-small-danger btn-inline">Editar</button>
-                                                        <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
-                                                    </div>
-                                                </div>
-                                                <div className="eq-preview-box">
-                                                    {block.content?.trim() ? (
-                                                        <BlockMath
-                                                            math={block.content}
-                                                            errorColor="#ef4444"
-                                                            renderError={(error) => (
-                                                                <span className="eq-preview-error">{error.message}</span>
-                                                            )}
-                                                        />
-                                                    ) : (
-                                                        <span className="eq-preview-empty">Sin ecuacion</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* Herramientas Flotantes (Ahora añaden al final) */}
-                            <div className="hover-toolbar" style={{ marginTop: '1.5rem', padding: '1rem', border: '2px dashed #e5e7eb', borderRadius: '0.75rem', display: 'flex', gap: '1rem', justifyContent: 'center', backgroundColor: '#f9fafb' }}>
-                                <button className="tool-btn" onClick={() => insertTextBlock(idx)}>+ Texto</button>
-                                <label className="tool-btn" style={{ cursor: 'pointer' }}>
-                                    <span>+ Imagen</span>
-                                    <input type="file" className="hidden" accept="image/*" style={{ display: 'none' }} onChange={e => addImageToChapter(idx, e.target.files?.[0])} />
-                                </label>
-                                <button className="tool-btn" onClick={() => openModal('table', idx)}>+ Tabla</button>
-                                <button className="tool-btn" onClick={() => openModal('equation', idx)}>+ Ecuación</button>
-                            </div>
-                        </section>
-                    ))}
-
-                    <button onClick={addChapter} className="btn-add-large">
-                        <span style={{ fontSize: '1.5rem' }}>+</span>
-                        <span style={{ fontWeight: 500 }}>Agregar nuevo capítulo</span>
+            <div className="editor-layout">
+                {/* Sidebar */}
+                <aside className="sidebar">
+                    <div className="sidebar-title">Capítulos</div>
+                    <button className="sidebar-link" onClick={() => goToChapter("intro")}>
+                        Introducción
                     </button>
-                </div>
+                    {chapters.map((ch, idx) => (
+                        <button
+                            key={ch.id}
+                            className="sidebar-link"
+                            onClick={() => goToChapter(ch.id)}
+                        >
+                            {ch.title || `Capítulo ${idx + 1}`}
+                        </button>
+                    ))}
+                    <button className="sidebar-link" onClick={() => goToChapter("conclusions")}>
+                        Conclusiones
+                    </button>
+                    <button className="sidebar-link" onClick={() => goToChapter("references")}>
+                        Referencias
+                    </button>
+                </aside>
 
-                {/* Bloque: Conclusiones */}
-                <section className="section-block">
-                    <div className="section-header">
-                        <h2 className="label-small">Conclusiones</h2>
-                    </div>
-                    <textarea
-                        className="input-ghost textarea-content"
-                        value={conclusions}
-                        onChange={e => handleResize(e, setConclusions)}
-                        placeholder="Escribe las conclusiones..."
-                    />
-                </section>
+                {/* Área Principal de Edición */}
+                <main className="editor-main">
+                    {/* Bloque: Portada */}
+                    <div className="section-block">
+                        <input
+                            className="input-ghost input-h1"
+                            value={meta.title}
+                            onChange={e => setMeta({ ...meta, title: e.target.value })}
+                            placeholder="Título de la Tesis"
+                        />
 
-                {/* Bloque: Referencias */}
-                <section className="section-block" style={{ marginBottom: 0 }}>
-                    <div className="section-header">
-                        <h2 className="label-small">Referencias (BibTeX)</h2>
-                    </div>
-                    <textarea
-                        className="input-ghost textarea-content textarea-mono"
-                        value={bib}
-                        onChange={e => setBib(e.target.value)}
-                        placeholder="Pega aquí tus referencias..."
-                    />
-                    <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem' }}>
-                        <button className="btn btn-secondary" onClick={() => setActiveModal('reference')}>+ Referencia</button>
-                        <ActionButton parentMethod={exportBIB} label="Exportar referencias" />
-                    </div>
-                </section>
+                        <div className="meta-group">
+                            <div className="meta-item">
+                                <span className="label-small">Autor</span>
+                                <input
+                                    className="input-ghost input-meta"
+                                    value={meta.author}
+                                    onChange={e => setMeta({ ...meta, author: e.target.value })}
+                                    placeholder="Tu Nombre"
+                                />
+                            </div>
+                            <div className="meta-item">
+                                <span className="label-small">Fecha</span>
+                                <input
+                                    className="input-ghost input-meta"
+                                    value={meta.date}
+                                    onChange={e => setMeta({ ...meta, date: e.target.value })}
+                                    placeholder="Seleccionar fecha"
+                                />
+                            </div>
+                        </div>
 
-            </main>
+                        <div className="meta-group" style={{ flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
+                            <div>
+                                <span className="label-small">Dedicatoria</span>
+                                <textarea
+                                    className="input-ghost textarea-content"
+                                    value={meta.dedication || ""}
+                                    onChange={e => handleResize(e, val => setMeta({ ...meta, dedication: val }))}
+                                    placeholder="Escribe tu dedicatoria..."
+                                    style={{ minHeight: '3rem', fontStyle: 'italic' }}
+                                />
+                            </div>
+                            <div>
+                                <span className="label-small">Agradecimientos</span>
+                                <textarea
+                                    className="input-ghost textarea-content"
+                                    value={meta.acknowledgements || ""}
+                                    onChange={e => handleResize(e, val => setMeta({ ...meta, acknowledgements: val }))}
+                                    placeholder="Escribe tus agradecimientos..."
+                                    style={{ minHeight: '3rem' }}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Bloque: Introducción */}
+                    <section className="section-block" id="chapter-intro">
+                        <div className="section-header">
+                            <h2 className="label-small">Introducción</h2>
+                        </div>
+                        <textarea
+                            className="input-ghost textarea-content"
+                            value={intro}
+                            onChange={e => handleResize(e, setIntro)}
+                            placeholder="Escribe una introducción..."
+                        />
+                    </section>
+
+                    {/* Bloque: Capítulos */}
+                    <div className="section-block">
+                        {chapters.map((ch, idx) => (
+                            <section
+                                key={ch.id}
+                                id={`chapter-${ch.id}`}
+                                className="chapter-block"
+                            >
+                                <div className="chapter-title-row">
+                                    <input
+                                        className="input-ghost input-h1"
+                                        style={{ fontSize: '2rem', marginBottom: 0 }}
+                                        value={ch.title}
+                                        onChange={e => updateChapter(idx, "title", e.target.value)}
+                                        placeholder="Título del Capítulo"
+                                    />
+                                    <button onClick={() => removeChapter(idx)} className="btn btn-danger">
+                                        Eliminar
+                                    </button>
+                                </div>
+
+                                <div className="blocks-container" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+                                    {(ch.blocks || []).map(block => (
+                                        <div key={block.id} className="content-block" style={{ position: 'relative' }}>
+                                            {/* TEXT BLOCK */}
+                                            {block.type === 'text' && (
+                                                <textarea
+                                                    className="input-ghost textarea-content"
+                                                    value={block.content || ""}
+                                                    onChange={e => {
+                                                        updateBlock(idx, block.id, "content", e.target.value);
+                                                        e.target.style.height = 'auto';
+                                                        e.target.style.height = e.target.scrollHeight + 'px';
+                                                    }}
+                                                    placeholder="Escribe aquí..."
+                                                    style={{ minHeight: '3rem' }}
+                                                />
+                                            )}
+
+                                            {/* IMAGE BLOCK */}
+                                            {block.type === 'image' && (
+                                                <div className="image-card" style={{ maxWidth: '300px', margin: '0.5rem 0' }}>
+                                                    {block.url ? <img src={block.url} alt="preview" style={{ maxHeight: '200px', maxWidth: '100%', marginBottom: '0.5rem', borderRadius: '4px' }} /> : <span className="label-small">Subiendo...</span>}
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                        <span className="label-small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{block.filename}</span>
+                                                        <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                                    </div>
+                                                    <input
+                                                        className="input-ghost caption-input"
+                                                        value={block.caption || ""}
+                                                        onChange={e => updateBlock(idx, block.id, 'caption', e.target.value)}
+                                                        placeholder="Pie de foto..."
+                                                        style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {/* TABLE BLOCK */}
+                                            {block.type === 'table' && (
+                                                <div className="media-card">
+                                                    <div className="media-card-header">
+                                                        <span className="media-card-title">Tabla: {block.caption || "(Sin nombre)"}</span>
+                                                        <div className="media-card-actions">
+                                                            <button onClick={() => openTableEditModal(idx, block.id)} className="btn-small-danger btn-inline">Editar</button>
+                                                            <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="table-preview">
+                                                        <table>
+                                                            <tbody>
+                                                                {Array.from({ length: block.rows || 0 }).map((_, r) => (
+                                                                    <tr key={`row-${r}`}>
+                                                                        {Array.from({ length: block.cols || 0 }).map((__, c) => (
+                                                                            <td key={`cell-${r}-${c}`}>
+                                                                                {block.data?.[`${r}-${c}`] || ""}
+                                                                            </td>
+                                                                        ))}
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* EQUATION BLOCK */}
+                                            {block.type === 'equation' && (
+                                                <div className="media-card">
+                                                    <div className="media-card-header">
+                                                        <span className="media-card-title">Ecuacion</span>
+                                                        <div className="media-card-actions">
+                                                            <button onClick={() => openEquationEditModal(idx, block.id)} className="btn-small-danger btn-inline">Editar</button>
+                                                            <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="eq-preview-box">
+                                                        {block.content?.trim() ? (
+                                                            <BlockMath
+                                                                math={block.content}
+                                                                errorColor="#ef4444"
+                                                                renderError={(error) => (
+                                                                    <span className="eq-preview-error">{error.message}</span>
+                                                                )}
+                                                            />
+                                                        ) : (
+                                                            <span className="eq-preview-empty">Sin ecuacion</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="hover-toolbar" style={{ marginTop: '1.5rem', padding: '1rem', border: '2px dashed #e5e7eb', borderRadius: '0.75rem', display: 'flex', gap: '1rem', justifyContent: 'center', backgroundColor: '#f9fafb' }}>
+                                    <button className="tool-btn" onClick={() => insertTextBlock(idx)}>+ Texto</button>
+                                    <label className="tool-btn" style={{ cursor: 'pointer' }}>
+                                        <span>+ Imagen</span>
+                                        <input type="file" className="hidden" accept="image/*" style={{ display: 'none' }} onChange={e => addImageToChapter(idx, e.target.files?.[0])} />
+                                    </label>
+                                    <button className="tool-btn" onClick={() => openModal('table', idx)}>+ Tabla</button>
+                                    <button className="tool-btn" onClick={() => openModal('equation', idx)}>+ Ecuación</button>
+                                </div>
+                            </section>
+                        ))}
+
+                        <button onClick={addChapter} className="btn-add-large">
+                            <span style={{ fontSize: '1.5rem' }}>+</span>
+                            <span style={{ fontWeight: 500 }}>Agregar nuevo capítulo</span>
+                        </button>
+                    </div>
+
+                    {/* Bloque: Conclusiones */}
+                    <section className="section-block" id="chapter-conclusions">
+                        <div className="section-header">
+                            <h2 className="label-small">Conclusiones</h2>
+                        </div>
+                        <textarea
+                            className="input-ghost textarea-content"
+                            value={conclusions}
+                            onChange={e => handleResize(e, setConclusions)}
+                            placeholder="Escribe las conclusiones..."
+                        />
+                    </section>
+
+                    {/* Bloque: Referencias */}
+                    <section className="section-block" id="chapter-references" style={{ marginBottom: 0 }}>
+                        <div className="section-header">
+                            <h2 className="label-small">Referencias (BibTeX)</h2>
+                        </div>
+                        <textarea
+                            className="input-ghost textarea-content textarea-mono"
+                            value={bib}
+                            onChange={e => setBib(e.target.value)}
+                            placeholder="Pega aquí tus referencias..."
+                        />
+                        <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem' }}>
+                            <button className="btn btn-secondary" onClick={() => setActiveModal('reference')}>+ Referencia</button>
+                            <ActionButton parentMethod={exportBIB} label="Exportar referencias" />
+                        </div>
+                    </section>
+                </main>
+            </div>
 
             {/* MODALES */}
             {activeModal === 'table' && (
