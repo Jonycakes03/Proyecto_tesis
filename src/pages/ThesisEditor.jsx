@@ -29,13 +29,14 @@ const TableModal = ({ onClose, onInsert }) => {
     const [rows, setRows] = useState(2);
     const [cols, setCols] = useState(2);
     const [name, setName] = useState("");
+    const [step, setStep] = useState(1); // 1: Config, 2: Data
     const [data, setData] = useState({});
 
     const handleCellChange = (r, c, val) => {
         setData({ ...data, [`${r}-${c}`]: val });
     };
 
-    const handleInsert = () => {
+    const handleSave = () => {
         onInsert({ rows, cols, data, caption: name });
         onClose();
     };
@@ -79,43 +80,51 @@ const TableModal = ({ onClose, onInsert }) => {
         <div className="modal-overlay">
             <div className="modal-content">
                 <h3>Agregar Tabla</h3>
-                <div className="modal-body">
-                    <div className="form-group">
-                        <label>Nombre de la tabla:</label>
-                        <input
-                            placeholder="Ej: Resultados del experimento"
-                            value={name}
-                            onChange={e => setName(e.target.value)}
-                        />
+                {step === 1 ? (
+                    <div className="modal-body">
+                        <div className="form-group">
+                            <label>Nombre de la tabla:</label>
+                            <input
+                                placeholder="Ej: Resultados del experimento"
+                                value={name}
+                                onChange={e => setName(e.target.value)}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label>Filas:</label>
+                            <input type="number" min="1" value={rows} onChange={e => setRows(parseInt(e.target.value))} />
+                        </div>
+                        <div className="form-group">
+                            <label>Columnas:</label>
+                            <input type="number" min="1" value={cols} onChange={e => setCols(parseInt(e.target.value))} />
+                        </div>
+                        <div className="modal-actions">
+                            <button onClick={onClose}>Cancelar</button>
+                            <button onClick={() => setStep(2)}>Siguiente</button>
+                        </div>
                     </div>
-
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                        <button type="button" className="btn btn-secondary" onClick={addRow}>+ Fila</button>
-                        <button type="button" className="btn btn-secondary" onClick={addCol}>+ Columna</button>
-                        <button type="button" className="btn btn-secondary" onClick={removeRow}>- Fila</button>
-                        <button type="button" className="btn btn-secondary" onClick={removeCol}>- Columna</button>
+                ) : (
+                    <div className="modal-body">
+                        <div className="table-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+                            {Array.from({ length: rows * cols }).map((_, idx) => {
+                                const r = Math.floor(idx / cols);
+                                const c = idx % cols;
+                                return (
+                                    <input
+                                        key={`${r}-${c}`}
+                                        placeholder={`(${r + 1},${c + 1})`}
+                                        value={data[`${r}-${c}`] || ""}
+                                        onChange={e => handleCellChange(r, c, e.target.value)}
+                                    />
+                                );
+                            })}
+                        </div>
+                        <div className="modal-actions">
+                            <button onClick={() => setStep(1)}>Atrás</button>
+                            <button onClick={handleInsert}>Insertar</button>
+                        </div>
                     </div>
-
-                    <div className="table-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
-                        {Array.from({ length: rows * cols }).map((_, idx) => {
-                            const r = Math.floor(idx / cols);
-                            const c = idx % cols;
-                            return (
-                                <input
-                                    key={`${r}-${c}`}
-                                    placeholder={`(${r + 1},${c + 1})`}
-                                    value={data[`${r}-${c}`] || ""}
-                                    onChange={e => handleCellChange(r, c, e.target.value)}
-                                />
-                            );
-                        })}
-                    </div>
-
-                    <div className="modal-actions">
-                        <button onClick={onClose}>Cancelar</button>
-                        <button onClick={handleInsert}>Insertar</button>
-                    </div>
-                </div>
+                )}
             </div>
         </div>
     );
@@ -123,74 +132,8 @@ const TableModal = ({ onClose, onInsert }) => {
 
 const EquationModal = ({ onClose, onInsert }) => {
     const [content, setContent] = useState("");
-    const textareaRef = React.useRef(null);
 
-    const insertAtCursor = (latex) => {
-        const el = textareaRef.current;
-        if (!el) return;
-        const start = el.selectionStart ?? content.length;
-        const end = el.selectionEnd ?? content.length;
-        const next = content.slice(0, start) + latex + content.slice(end);
-        setContent(next);
-        requestAnimationFrame(() => {
-            el.focus();
-            const pos = start + latex.length;
-            el.setSelectionRange(pos, pos);
-        });
-    };
-
-    const wrapSelection = (left, right = "") => {
-        const el = textareaRef.current;
-        if (!el) return;
-        const start = el.selectionStart ?? content.length;
-        const end = el.selectionEnd ?? content.length;
-        const selected = content.slice(start, end) || " ";
-        const next = content.slice(0, start) + left + selected + right + content.slice(end);
-        setContent(next);
-        requestAnimationFrame(() => {
-            el.focus();
-            const pos = start + left.length + selected.length;
-            el.setSelectionRange(pos, pos);
-        });
-    };
-
-    const SYMBOLS = [
-        { label: "α", latex: "\\alpha " },
-        { label: "β", latex: "\\beta " },
-        { label: "γ", latex: "\\gamma " },
-        { label: "Δ", latex: "\\Delta " },
-        { label: "θ", latex: "\\theta " },
-        { label: "λ", latex: "\\lambda " },
-        { label: "μ", latex: "\\mu " },
-        { label: "π", latex: "\\pi " },
-        { label: "σ", latex: "\\sigma " },
-        { label: "Ω", latex: "\\Omega " },
-        { label: "√", latex: "\\sqrt{}" },
-        { label: "∑", latex: "\\sum_{}^{}" },
-        { label: "∫", latex: "\\int_{}^{}" },
-        { label: "∞", latex: "\\infty " },
-        { label: "≈", latex: "\\approx " },
-        { label: "≠", latex: "\\neq " },
-        { label: "≤", latex: "\\leq " },
-        { label: "≥", latex: "\\geq " },
-        { label: "→", latex: "\\to " },
-        { label: "⇔", latex: "\\Leftrightarrow " },
-        { label: "×", latex: "\\times " },
-        { label: "·", latex: "\\cdot " },
-        { label: "±", latex: "\\pm " },
-        { label: "…", latex: "\\dots " }
-    ];
-
-    const TEMPLATES = [
-        { label: "Fracción", action: () => wrapSelection("\\frac{", "}") },
-        { label: "Raíz", action: () => insertAtCursor("\\sqrt{}") },
-        { label: "Supíndice", action: () => wrapSelection("^{", "}") },
-        { label: "Subíndice", action: () => wrapSelection("_{", "}") },
-        { label: "Paréntesis", action: () => wrapSelection("\\left(", "\\right)") },
-        { label: "Corchetes", action: () => wrapSelection("\\left[", "\\right]") }
-    ];
-
-    const handleInsert = () => {
+    const handleSave = () => {
         onInsert({ content });
         onClose();
     };
@@ -198,7 +141,7 @@ const EquationModal = ({ onClose, onInsert }) => {
     return (
         <div className="modal-overlay">
             <div className="modal-content">
-                <h3>Agregar Ecuación</h3>
+                <h3>{isEditing ? "Editar Ecuación" : "Agregar Ecuación"}</h3>
                 <div className="modal-body">
                     <div className="eq-toolbar">
                         <div className="eq-toolbar-row">
@@ -243,7 +186,7 @@ const EquationModal = ({ onClose, onInsert }) => {
                     </div>
                     <div className="modal-actions">
                         <button onClick={onClose}>Cancelar</button>
-                        <button onClick={handleInsert}>Insertar</button>
+                        <button onClick={handleSave}>{isEditing ? "Guardar" : "Insertar"}</button>
                     </div>
                 </div>
             </div>
@@ -384,6 +327,8 @@ function ThesisEditor() {
     // Modal State
     const [activeModal, setActiveModal] = useState(null); // 'table' | 'equation' | 'reference' | null
     const [activeChapterIdx, setActiveChapterIdx] = useState(null);
+    const [editingTableId, setEditingTableId] = useState(null); // Para edición de tabla
+    const [editingEquationId, setEditingEquationId] = useState(null); // Para edición de ecuación
 
 
     // Estructura lógica para exportar
@@ -639,18 +584,49 @@ function ThesisEditor() {
     const openModal = (type, idx) => {
         setActiveModal(type);
         setActiveChapterIdx(idx);
+        setEditingTableId(null);
+        setEditingEquationId(null);
+    };
+    const openTableEditModal = (idx, blockId) => {
+        setActiveModal('table');
+        setActiveChapterIdx(idx);
+        setEditingTableId(blockId);
+        setEditingEquationId(null);
+    };
+    const openEquationEditModal = (idx, blockId) => {
+        setActiveModal('equation');
+        setActiveChapterIdx(idx);
+        setEditingEquationId(blockId);
+        setEditingTableId(null);
     };
     const closeModal = () => {
         setActiveModal(null);
         setActiveChapterIdx(null);
+        setEditingTableId(null);
+        setEditingEquationId(null);
     };
     const insertTable = (tableData) => {
         if (activeChapterIdx === null) return;
-        setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, blocks: [...(ch.blocks || []), { id: Date.now(), type: 'table', ...tableData }] } : ch));
+        if (editingTableId !== null) {
+            // Editar tabla existente
+            updateBlock(activeChapterIdx, editingTableId, 'rows', tableData.rows);
+            updateBlock(activeChapterIdx, editingTableId, 'cols', tableData.cols);
+            updateBlock(activeChapterIdx, editingTableId, 'data', tableData.data);
+            updateBlock(activeChapterIdx, editingTableId, 'caption', tableData.caption);
+        } else {
+            // Insertar tabla nueva
+            setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, blocks: [...(ch.blocks || []), { id: Date.now(), type: 'table', ...tableData }] } : ch));
+        }
     };
     const insertEquation = (eqData) => {
         if (activeChapterIdx === null) return;
-        setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, blocks: [...(ch.blocks || []), { id: Date.now(), type: 'equation', ...eqData }] } : ch));
+        if (editingEquationId !== null) {
+            // Editar ecuación existente
+            updateBlock(activeChapterIdx, editingEquationId, 'content', eqData.content);
+        } else {
+            // Insertar ecuación nueva
+            setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, blocks: [...(ch.blocks || []), { id: Date.now(), type: 'equation', ...eqData }] } : ch));
+        }
     };
     const insertTerm = (termData) => {
         // Implement if needed for terms, otherwise ignore
@@ -834,7 +810,10 @@ function ThesisEditor() {
                                             <div className="media-item" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '1rem', border: '1px solid #eee', borderRadius: '8px', gap: '0.75rem' }}>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
                                                     <span style={{ fontWeight: 600, color: '#374151' }}>Tabla: {block.caption || "(Sin nombre)"}</span>
-                                                    <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                        <button onClick={() => openTableEditModal(idx, block.id)} className="btn-small-danger" style={{ color: '#3b82f6', cursor: 'pointer' }}>Editar</button>
+                                                        <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
+                                                    </div>
                                                 </div>
                                                 <div className="table-preview">
                                                     <table>
@@ -856,24 +835,9 @@ function ThesisEditor() {
 
                                         {/* EQUATION BLOCK */}
                                         {block.type === 'equation' && (
-                                            <div className="media-item" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1rem', border: '1px solid #eee', borderRadius: '8px' }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                                                    <span style={{ fontWeight: 600, color: '#374151' }}>Ecuación</span>
-                                                    <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
-                                                </div>
-                                                <div className="eq-preview-box">
-                                                    {block.content?.trim() ? (
-                                                        <BlockMath
-                                                            math={block.content}
-                                                            errorColor="#ef4444"
-                                                            renderError={(error) => (
-                                                                <span className="eq-preview-error">{error.message}</span>
-                                                            )}
-                                                        />
-                                                    ) : (
-                                                        <span className="eq-preview-empty">Sin ecuación</span>
-                                                    )}
-                                                </div>
+                                            <div className="media-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', border: '1px solid #eee', borderRadius: '8px' }}>
+                                                <code style={{ fontSize: '1.1rem' }}>{block.content}</code>
+                                                <button onClick={() => removeBlock(idx, block.id)} className="btn-small-danger">Eliminar</button>
                                             </div>
                                         )}
                                     </div>
@@ -932,8 +896,22 @@ function ThesisEditor() {
             </main>
 
             {/* MODALES */}
-            {activeModal === 'table' && <TableModal onClose={closeModal} onInsert={insertTable} />}
-            {activeModal === 'equation' && <EquationModal onClose={closeModal} onInsert={insertEquation} />}
+            {activeModal === 'table' && (
+                <TableModal 
+                    onClose={closeModal} 
+                    onInsert={insertTable}
+                    isEditing={editingTableId !== null}
+                    existingData={editingTableId !== null && activeChapterIdx !== null ? chapters[activeChapterIdx].blocks.find(b => b.id === editingTableId) : null}
+                />
+            )}
+            {activeModal === 'equation' && (
+                <EquationModal 
+                    onClose={closeModal} 
+                    onInsert={insertEquation}
+                    isEditing={editingEquationId !== null}
+                    existingData={editingEquationId !== null && activeChapterIdx !== null ? chapters[activeChapterIdx].blocks.find(b => b.id === editingEquationId) : null}
+                />
+            )}
             {activeModal === 'reference' && <ReferenceModal onClose={() => setActiveModal(null)} onInsert={insertReference} />}
 
         </div>
