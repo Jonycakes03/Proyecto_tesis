@@ -116,7 +116,7 @@ const TableModal = ({ onClose, onInsert, isEditing = false, existingData = null 
                                     onChange={e => handleCellChange(r, c, e.target.value)}
                                 />
                             );
-                        })}
+                            })}
                     </div>
 
                     <div className="modal-actions">
@@ -679,10 +679,12 @@ function ThesisEditor() {
         if (activeChapterIdx === null) return;
         if (editingTableId !== null) {
             // Editar tabla existente
-            updateBlock(activeChapterIdx, editingTableId, 'rows', tableData.rows);
-            updateBlock(activeChapterIdx, editingTableId, 'cols', tableData.cols);
-            updateBlock(activeChapterIdx, editingTableId, 'data', tableData.data);
-            updateBlock(activeChapterIdx, editingTableId, 'caption', tableData.caption);
+            updateBlockData(activeChapterIdx, editingTableId, {
+                rows: tableData.rows,
+                cols: tableData.cols,
+                data: tableData.data,
+                caption: tableData.caption
+            });
         } else {
             // Insertar tabla nueva
             setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, blocks: [...(ch.blocks || []), { id: Date.now(), type: 'table', ...tableData }] } : ch));
