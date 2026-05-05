@@ -2,24 +2,13 @@ import React, { useState, useEffect } from "react";
 import { ActionButton } from "../components";
 import "../app.css";
 import { downloadZip } from "../utils/zipDownload";
+import { downloadText } from "../utils/fileDownload";
 import { buildTex } from "../utils/latexExport";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { db, storage } from "../firebase";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-
-// --- FUNCIONES DE UTILIDAD (Internas para evitar errores de importación) ---
-
-const downloadText = (filename, content) => {
-    const element = document.createElement("a");
-    const file = new Blob([content], { type: "text/plain" });
-    element.href = URL.createObjectURL(file);
-    element.download = filename;
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-};
 
 // --- COMPONENTES INTERNOS DE MODAL ---
 
@@ -557,10 +546,6 @@ function ThesisEditor() {
             setChapters(chapters.map((ch, i) => i === activeChapterIdx ? { ...ch, blocks: [...(ch.blocks || []), { id: Date.now(), type: 'equation', ...eqData }] } : ch));
         }
     };
-    const insertTerm = (termData) => {
-        // Implement if needed for terms, otherwise ignore
-    };
-
     const insertTextBlock = (chapterIdx) => {
         setChapters(chapters.map((ch, i) => i === chapterIdx ? {
             ...ch,

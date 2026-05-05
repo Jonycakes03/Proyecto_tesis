@@ -59,11 +59,8 @@ export function mdToLatex(md = "") {
 
 // Renderiza una sección y sus hijas
 export function renderSection(sec) {
-  let cmd = LEVEL_CMD[sec?.level] || "\\paragraph";
-  if (sec?.unnumbered) {
-    cmd = cmd.replace("\\", "\\") + "*"; // e.g., \section*
-  }
-
+  const baseCommand = LEVEL_CMD[sec?.level] || "\\paragraph";
+  const command = sec?.unnumbered ? `${baseCommand}*` : baseCommand;
   const title = escapeLatex(sec?.title || "Untitled");
 
   let body = "";
